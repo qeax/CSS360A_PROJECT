@@ -18,6 +18,11 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd /home/ubuntu/projects/css360
+            
+            sudo docker-compose down --remove-orphans
+            
             git pull origin main
+            
             sudo docker-compose up -d --build --force-recreate
