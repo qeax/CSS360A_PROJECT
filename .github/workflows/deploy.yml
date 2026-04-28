@@ -22,10 +22,10 @@ jobs:
             cd /home/ubuntu/projects/css360
             
             docker network create proxy_network || true
-            docker-compose down --remove-orphans
+            docker compose down --remove-orphans
             
             git pull origin main
             
-            docker-compose up -d --build --force-recreate
+            docker compose up -d --build --force-recreate
             
             docker compose ps
