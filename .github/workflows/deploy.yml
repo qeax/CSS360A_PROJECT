@@ -21,6 +21,8 @@ jobs:
             set -e
             cd /home/ubuntu/projects/css360
             
+            git config --global --add safe.directory /home/ubuntu/projects/css360
+            
             sudo docker-compose down --remove-orphans
             
             git pull origin main
