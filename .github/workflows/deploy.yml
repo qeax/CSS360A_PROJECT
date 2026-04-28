@@ -2,7 +2,7 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ] # Triggered on every push in main branch
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -21,10 +21,11 @@ jobs:
             set -e
             cd /home/ubuntu/projects/css360
             
-            git config --global --add safe.directory /home/ubuntu/projects/css360
-            
-            sudo docker-compose down --remove-orphans
+            docker network create proxy_network || true
+            docker-compose down --remove-orphans
             
             git pull origin main
             
-            sudo docker-compose up -d --build --force-recreate
+            docker-compose up -d --build --force-recreate
+            
+            docker compose ps
