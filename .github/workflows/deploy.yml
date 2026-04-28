@@ -20,4 +20,4 @@ jobs:
           script: |
             cd /home/ubuntu/projects/css360
             git pull origin main
-            sudo docker-compose up -d --build
+            sudo docker-compose up -d --build --force-recreate
