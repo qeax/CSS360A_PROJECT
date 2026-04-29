@@ -36,7 +36,7 @@
         .car-name { font-weight: 600; font-size: 1.1em; }
         .car-sub { font-size: 12px; color: #64748b; }
         .price-col { text-align: right; font-weight: 600; }
-        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 2px solid #47534d; background: #047857; color: #4b4b54; }
+        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 1px solid #47534d; background: #047857; color: white; }
         .loading { text-align: center; padding: 40px; color: #64748b; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
         .modal-box { background: var(--ui-white); padding: 30px; border-radius: 20px; width: 450px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
@@ -83,10 +83,10 @@
 
     <script>
 
-        function calculateHeatmap(roi) {
+        function calculateHeatmap(roi, brightness) {
             const score = Math.min(Math.max(roi, 0), 30);
             const hue = (score / 30) * 120; // 0 = Red, 120 = Green
-            return `hsl(${hue}, 60%, 55%)`;
+            return `hsl(${hue}, 55%, ${brightness}%)`;
         }
         async function executeSearch() {
             const params = new URLSearchParams();
@@ -114,7 +114,8 @@
                 }
 
                 list.innerHTML = cars.map(car => {
-                const heatmapColor = calculateHeatmap(car.roi);
+                const heatmapColor = calculateHeatmap(car.roi, 50);
+                const heatmapColorBg = calculateHeatmap(car.roi, 20);
 
                 return `
                     <div class="car-row" onclick="showDetails('${car.brand} ${car.model}', ${car.price}, ${car.resale_value}, ${car.repair_cost}, ${car.net_profit}, ${car.roi}, '${car.condition}')">
@@ -124,7 +125,7 @@
                         </div>
                         <div class="price-col">$${car.price.toLocaleString()}</div>
                         
-                        <div class="roi-pill" style="background-color: ${heatmapColor}; color: white; border-color: ${heatmapColor};">
+                        <div class="roi-pill" style="background-color: ${heatmapColor}; color: white; border-color: ${heatmapColorBg};">
                             ${car.roi}% ROI
                         </div>
                         
