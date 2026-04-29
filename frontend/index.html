@@ -6,194 +6,140 @@
     <title>Car Flip Marketplace</title>
     <style>
         :root {
-			--bg-page: #f1f5f9; 
-			--ui-white: #ffffff;
-			--accent-green: #059669; 
-			--border-green: #10b981;
-			--shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-		}
-
-        body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: var(--bg-page);
-            color: var(--text-main);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            height: 100vh;
+            --bg-page: #f1f5f9; 
+            --ui-white: #ffffff;
+            --accent-green: #059669; 
+            --border-green: #10b981;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --text-main: #0f172a;
+            --border-color: #cbd5e1;
+            --border-soft: #e2e8f0;
+            --green-light: #f0fdf4;
         }
-
-        .marketplace-container {
-            width: 100%;
-            max-width: 900px;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-        }
-
-        /* Marketplace Search Header */
-        .search-header {
-			background: var(--ui-white);
-			padding: 24px;
-			border-radius: 16px;
-			box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-			margin-bottom: 20px;
-			border: 1px solid var(--border-green); /* Added green border */
-		}
-
-        .search-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .search-main {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 16px;
-        }
-
-        .search-main:focus {
-            border-color: var(--accent-green);
-            outline: none;
-        }
-
-        .btn-search {
-            background: var(--accent-green);
-            color: white;
-            border: none;
-            padding: 0 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: var(--bg-page); color: var(--text-main); margin: 0; display: flex; justify-content: center; height: 100vh; }
+        .marketplace-container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; padding: 20px; }
+        
+        /* Header */
+        .search-header { background: var(--ui-white); padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 20px; border: 1px solid var(--border-green); }
+        .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        .input-group input, .input-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+        .input-group input:focus { border-color: var(--accent-green); outline: none; }
+        
+        .btn-search { background: var(--accent-green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s; }
         .btn-search:hover { background: #047857; }
 
-        .filters-row {
-            display: flex;
-            gap: 15px;
-            font-size: 14px;
-        }
-
-        .filter-group { display: flex; align-items: center; gap: 8px; }
-
-        .filter-group input {
-            padding: 6px 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            width: 100px;
-        }
-
-        /* Scrollable List Area */
-        .scroll-container {
-			flex: 1;
-			overflow-y: auto;
-			background: transparent; /* Changed to show separation */
-			border: none;
-			padding: 5px;
-		}
-
-        .car-row {
-			display: grid;
-			grid-template-columns: 1fr 100px 120px 120px;
-			align-items: center;
-			padding: 16px;
-			background: var(--ui-white);
-			margin-bottom: 12px; /* Spacing between items */
-			border-radius: 12px;
-			border: 1px solid var(--border-soft);
-			box-shadow: var(--shadow-sm);
-			transition: all 0.2s ease; /* Responsiveness transition */
-			cursor: pointer;
-		}
-
-        .car-row:hover {
-			transform: translateY(-2px); /* Slight lift */
-			border-color: var(--border-green);
-			box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-			background: var(--green-light);
-		}
-
+        /* List */
+        .scroll-container { flex: 1; overflow-y: auto; padding: 5px; }
+        .car-row { display: grid; grid-template-columns: 1fr 100px 120px 120px 120px; align-items: center; padding: 16px; background: var(--ui-white); margin-bottom: 12px; border-radius: 12px; border: 1px solid var(--border-soft); box-shadow: var(--shadow-sm); transition: all 0.2s ease; cursor: pointer; }
+        .car-row:hover { transform: translateY(-2px); border-color: var(--border-green); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); background: var(--green-light); }
         .car-name { font-weight: 600; font-size: 1.1em; }
-		
         .car-sub { font-size: 12px; color: #64748b; }
-
-		.roi-pill {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			padding: 6px 12px;
-			border-radius: 50px; /* Pill shape */
-			font-weight: 800;
-			font-size: 14px;
-			box-shadow: inset 0 1px 1px rgba(0,0,0,0.05);
-			border-width: 1px;
-			border-style: solid;
-		}
-		
-        .roi-indicator {
-            text-align: center;
-            padding: 5px;
-            border-radius: 6px;
-            font-weight: 800;
-            font-size: 13px;
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.5);
-            backdrop-filter: blur(4px);
-            justify-content: center; align-items: center;
-        }
-
-        .modal-box {
-            background: var(--ui-white);
-            padding: 30px;
-            border-radius: 20px;
-            width: 450px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
+        .price-col { text-align: right; font-weight: 600; }
+        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 1px solid #d1fae5; background: #ecfdf5; color: #059669; }
+        .loading { text-align: center; padding: 40px; color: #64748b; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
+        .modal-box { background: var(--ui-white); padding: 30px; border-radius: 20px; width: 450px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
     </style>
 </head>
 <body>
     <div class="marketplace-container">
         <header class="search-header">
-            <div class="search-row">
-                <input type="text" id="brandSearch" class="search-main" placeholder="Search by brand (e.g. Toyota, BMW)...">
-                <button class="btn-search" onclick="executeSearch()">Search</button>
-            </div>
-            <div class="filters-row">
-                <div class="filter-group">
-                    <label>Max Price:</label>
-                    <input type="number" id="priceFilter" placeholder="$">
+            <h3 style="margin-top:0; color:#0f172a;">🔍 Advanced Search</h3>
+            <div class="search-grid">
+                <div class="input-group"><label>Make (e.g. Toyota)</label><input type="text" id="makeSearch" placeholder="Make..."></div>
+                <div class="input-group"><label>Model (e.g. Camry)</label><input type="text" id="modelSearch" placeholder="Model..."></div>
+                <div class="input-group"><label>Min Year</label><input type="number" id="minYear" placeholder="2015"></div>
+                <div class="input-group"><label>Max Year</label><input type="number" id="maxYear" placeholder="2024"></div>
+                <div class="input-group">
+                    <label>Condition</label>
+                    <select id="conditionFilter">
+                        <option value="">Any</option>
+                        <option value="Excellent">Excellent</option>
+                        <option value="Good">Good</option>
+                        <option value="Fair">Fair</option>
+                        <option value="Poor">Poor</option>
+                    </select>
                 </div>
-                <div class="filter-group">
-                    <label>Min Year:</label>
-                    <input type="number" id="yearFilter" placeholder="2015">
-                </div>
+                <div class="input-group"><label>Max Price</label><input type="number" id="maxPrice" placeholder="20000"></div>
+                <div class="input-group"><label>Min Profit</label><input type="number" id="minProfit" placeholder="1000"></div>
+                <div class="input-group"><label>Min ROI %</label><input type="number" id="minRoi" placeholder="10"></div>
             </div>
+            <button class="btn-search" onclick="executeSearch()">Search Inventory</button>
         </header>
 
         <div class="scroll-container" id="inventoryList">
-            <!-- Items injected by JS -->
+            <div class="loading">Loading marketplace inventory...</div>
         </div>
     </div>
 
     <div id="itemModal" class="modal">
         <div class="modal-box">
-            <h2 id="modalHeader" style="color: var(--accent-green)"></h2>
+            <h2 id="modalHeader" style="color: var(--accent-green); margin-top:0;"></h2>
             <div id="modalContent"></div>
             <button onclick="hideModal()" style="margin-top: 20px; width: 100%; padding: 12px; border:none; background: #e2e8f0; border-radius: 8px; cursor:pointer;">Close</button>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        async function executeSearch() {
+            const params = new URLSearchParams();
+            // Collect all values
+            if (document.getElementById('makeSearch').value) params.append('make', document.getElementById('makeSearch').value);
+            if (document.getElementById('modelSearch').value) params.append('model', document.getElementById('modelSearch').value);
+            if (document.getElementById('minYear').value) params.append('min_year', document.getElementById('minYear').value);
+            if (document.getElementById('maxYear').value) params.append('max_year', document.getElementById('maxYear').value);
+            if (document.getElementById('conditionFilter').value) params.append('condition', document.getElementById('conditionFilter').value);
+            if (document.getElementById('maxPrice').value) params.append('max_price', document.getElementById('maxPrice').value);
+            if (document.getElementById('minProfit').value) params.append('min_profit', document.getElementById('minProfit').value);
+            if (document.getElementById('minRoi').value) params.append('min_roi', document.getElementById('minRoi').value);
+
+            const list = document.getElementById('inventoryList');
+            list.innerHTML = '<div class="loading">Searching inventory...</div>';
+
+            try {
+                const res = await fetch(`/cars?${params.toString()}`);
+                if (!res.ok) throw new Error('Failed to fetch data');
+                const cars = await res.json();
+
+                if (cars.length === 0) {
+                    list.innerHTML = '<div class="loading">No matches found. Try adjusting filters.</div>';
+                    return;
+                }
+
+                list.innerHTML = cars.map(car => `
+                    <div class="car-row" onclick="showDetails('${car.brand} ${car.model}', ${car.price}, ${car.resale_value}, ${car.repair_cost}, ${car.net_profit}, ${car.roi}, '${car.condition}')">
+                        <div>
+                            <div class="car-name">${car.brand} ${car.model}</div>
+                            <div class="car-sub">${car.year} • ${car.condition}</div>
+                        </div>
+                        <div class="price-col">$${car.price.toLocaleString()}</div>
+                        <div class="roi-pill">${car.roi}% ROI</div>
+                        <div class="roi-pill" style="background:#f0fdf4; border-color:#a7f3d0;">+$${car.net_profit.toLocaleString()}</div>
+                        <div style="text-align:right; color:#64748b; font-size:0.9em;">Click for details</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                list.innerHTML = '<div class="loading">Error loading data.</div>';
+            }
+        }
+
+        function showDetails(name, price, resale, repair, profit, roi, condition) {
+            document.getElementById('modalHeader').textContent = name;
+            document.getElementById('modalContent').innerHTML = `
+                <p><strong>Purchase Price:</strong> $${price.toLocaleString()}</p>
+                <p><strong>Est. Resale Value:</strong> $${resale.toLocaleString()}</p>
+                <p><strong>Repair Cost:</strong> $${repair.toLocaleString()}</p>
+                <p><strong>Condition:</strong> ${condition}</p>
+                <hr style="margin:15px 0; border:0; border-top:1px solid #e2e8f0;">
+                <p style="font-size:1.2em; color:#059669;"><strong>Net Profit:</strong> $${profit.toLocaleString()}</p>
+                <p style="font-size:1.2em; color:#059669;"><strong>ROI:</strong> ${roi}%</p>
+            `;
+            document.getElementById('itemModal').style.display = 'flex';
+        }
+
+        function hideModal() { document.getElementById('itemModal').style.display = 'none'; }
+        executeSearch(); // Initial load
+    </script>
 </body>
 </html>
