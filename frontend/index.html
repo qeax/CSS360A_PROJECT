@@ -14,7 +14,7 @@
             --text-main: #eef1f7;
             --border-color: #10b981;
             --border-soft: #334436;
-            --green-light: #2b392f;
+            --green-light: #4b4b54;
         }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: var(--bg-page); color: var(--text-main); margin: 0; display: flex; justify-content: center; height: 100vh; }
         .marketplace-container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; padding: 20px; }
@@ -23,10 +23,10 @@
         .search-header { background: var(--ui-white); padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 20px; border: 1px solid var(--border-green); }
         .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px; }
         .input-group label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
-        .input-group input, .input-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; box-sizing: border-box; background-color: #2b392f; color: white; }
+        .input-group input, .input-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; box-sizing: border-box; background-color: #4b4b54; color: white; }
         .input-group input:focus { border-color: var(--accent-green); outline: none; }
         
-        .btn-search { background: var(--accent-green); color: #2b392f; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s; }
+        .btn-search { background: var(--accent-green); color: #4b4b54; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s; }
         .btn-search:hover { background: #047857; }
 
         /* List */
@@ -36,7 +36,7 @@
         .car-name { font-weight: 600; font-size: 1.1em; }
         .car-sub { font-size: 12px; color: #64748b; }
         .price-col { text-align: right; font-weight: 600; }
-        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 1px solid #d1fae5; background: #ecfdf5; color: #059669; }
+        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 2px solid #47534d; background: #047857; color: #0000; }
         .loading { text-align: center; padding: 40px; color: #64748b; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
         .modal-box { background: var(--ui-white); padding: 30px; border-radius: 20px; width: 450px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
