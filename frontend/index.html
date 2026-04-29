@@ -1,82 +1,114 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSS360 - Car Search</title>
+    <title>Car Flip Analyzer</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #10b981;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
         }
-        
+
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-            color: white;
-            min-height: 100vh;
-            padding: 40px 20px;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
         }
-        
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #00ffcc, #00cc99);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .subtitle {
-            color: #999;
-            margin-bottom: 40px;
-        }
-        
-        #cars {
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        /* Header and Filter sections */
+        .filter-bar {
             display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
-        }
-        
-        .car {
-            background: #2a2a2a;
+            background: var(--card-bg);
             padding: 20px;
-            border-radius: 12px;
-            border-left: 5px solid #00ffcc;
-            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            margin-bottom: 30px;
         }
-        
-        .car:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 20px rgba(0, 255, 204, 0.2);
+
+        input {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            outline: none;
         }
-        
-        .car strong {
-            color: #00ffcc;
-            font-size: 1.2rem;
+
+        input:focus { border-color: var(--accent); }
+
+        /* Main results grid[cite: 9] */
+        .car-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
         }
-        
-        .loading {
-            text-align: center;
-            color: #666;
-            padding: 40px;
-        }
-        
-        .error {
-            background: #ff4444;
+
+        .car-card {
+            background: var(--card-bg);
             padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .car-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+
+        .roi-tag {
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        /* Modal styling */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            justify-content: center; align-items: center;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 30px;
             border-radius: 12px;
-            text-align: center;
+            width: 90%; max-width: 450px;
         }
     </style>
 </head>
 <body>
-    <h1>Car Search</h1>
-	<div id="cars" class="loading">Loading...</div>
+    <div class="container">
+        <header>
+            <h1 style="color: var(--accent)">Flip Analyzer</h1>
+            <div class="filter-bar">
+                <input type="text" id="brandInput" placeholder="Brand name">
+                <input type="number" id="priceInput" placeholder="Max price">
+                <input type="number" id="yearInput" placeholder="Min year">
+            </div>
+        </header>
+
+        <main id="cars" class="car-grid">Loading vehicles...</main>
+    </div>
+
+    <div id="carModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle" style="margin-top: 0;"></h2>
+            <div id="modalBody"></div>
+            <button onclick="closeModal()" style="margin-top: 20px; cursor: pointer;">Close</button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
