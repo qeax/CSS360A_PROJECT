@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-app = FastAPI()
+app = FastAPI(title="CSS360 API")
 
 # CORS
 app.add_middleware(
@@ -26,4 +26,4 @@ async def get_cars():
     
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "CSS360 Backend"}

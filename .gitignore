@@ -1,11 +1,22 @@
+
 # Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
 venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
 .env
+.env.local
 
 # Docker
 .docker/
+*.log
 
 # OS
 .DS_Store

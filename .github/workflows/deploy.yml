@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
@@ -19,13 +19,19 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+            
             cd /home/ubuntu/projects/css360
             
             docker network create proxy_network || true
+            
             docker compose down --remove-orphans
             
             git pull origin main
             
             docker compose up -d --build --force-recreate
             
+            echo "=== Deployment Status ==="
             docker compose ps
+            
+            echo "=== Recent Logs ==="
+            docker compose logs --tail=50
