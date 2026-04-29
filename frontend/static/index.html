@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Flip Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .filters h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .filter-grid input, .filter-grid select {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .filter-grid input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .results-count {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+        .car-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .car-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .car-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+        .car-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .car-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+        .car-year {
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+        .car-detail {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px 0;
+        }
+        .car-detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+        .car-detail-value {
+            color: #333;
+            font-weight: 600;
+        }
+        .profit-badge {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 15px;
+        }
+        .profit-amount {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        .roi-badge {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            padding: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Car Flip Analyzer</h1>
+        
+        <div class="filters">
+            <h3>🔍 Filter Vehicles</h3>
+            <div class="filter-grid">
+                <input type="text" id="make" placeholder="Make (e.g., Toyota)">
+                <input type="text" id="model" placeholder="Model (e.g., Camry)">
+                <input type="number" id="maxPrice" placeholder="Max Price ($)">
+                <input type="number" id="minYear" placeholder="Min Year (e.g., 2018)">
+            </div>
+            <button onclick="searchCars()">Search Best Flips</button>
+        </div>
+        
+        <div id="resultsCount" class="results-count"></div>
+        <div id="carGrid" class="car-grid">
+            <div class="loading">Loading cars...</div>
+        </div>
+    </div>
+
+    <script>
+        async function searchCars() {
+            const make = document.getElementById('make').value;
+            const model = document.getElementById('model').value;
+            const maxPrice = document.getElementById('maxPrice').value;
+            const minYear = document.getElementById('minYear').value;
+            
+            // Build query string
+            const params = new URLSearchParams();
+            if (make) params.append('make', make);
+            if (model) params.append('model', model);
+            if (maxPrice) params.append('max_price', maxPrice);
+            if (minYear) params.append('min_year', minYear);
+            
+            const grid = document.getElementById('carGrid');
+            const countDiv = document.getElementById('resultsCount');
+            grid.innerHTML = '<div class="loading">Searching...</div>';
+            
+            try {
+                const response = await fetch(`/cars?${params.toString()}`);
+                const cars = await response.json();
+                
+                countDiv.textContent = `Found ${cars.length} vehicles matching your criteria`;
+                
+                if (cars.length === 0) {
+                    grid.innerHTML = '<div class="loading">No vehicles found. Try adjusting your filters.</div>';
+                    return;
+                }
+                
+                grid.innerHTML = cars.map(car => `
+                    <div class="car-card">
+                        <div class="car-header">
+                            <div class="car-title">${car.make} ${car.model}</div>
+                            <div class="car-year">${car.year}</div>
+                        </div>
+                        <div class="car-detail">
+                            <span class="car-detail-label">Price:</span>
+                            <span class="car-detail-value">$${car.price.toLocaleString()}</span>
+                        </div>
+                        <div class="car-detail">
+                            <span class="car-detail-label">Condition:</span>
+                            <span class="car-detail-value">${car.condition}</span>
+                        </div>
+                        <div class="car-detail">
+                            <span class="car-detail-label">Resale Value:</span>
+                            <span class="car-detail-value">$${car.resale_value.toLocaleString()}</span>
+                        </div>
+                        <div class="profit-badge">
+                            <div>Est. Profit</div>
+                            <div class="profit-amount">$${car.profit.toLocaleString()}</div>
+                        </div>
+                        <div class="roi-badge">
+                            ROI: ${car.roi_percent}%
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                grid.innerHTML = '<div class="loading">Error loading cars. Please try again.</div>';
+                console.error('Error:', error);
+            }
+        }
+        
+        // Load all cars on page load
+        searchCars();
+    </script>
+</body>
+</html>
