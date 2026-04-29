@@ -16,21 +16,31 @@ function calculateHeatmap(roi) {
  * Primary search function triggered by button or Enter key
  */
 async function executeSearch() {
+    const list = document.getElementById('inventoryList');
     const brand = document.getElementById('brandSearch').value;
     const maxPrice = document.getElementById('priceFilter').value;
     const minYear = document.getElementById('yearFilter').value;
 
+    // Visual feedback for search button press
+    list.style.opacity = "0.5";
+
     const query = new URL('/api/cars', window.location.origin);
+    // Append parameters only if they have values[cite: 8]
     if (brand) query.searchParams.append('brand', brand);
     if (maxPrice) query.searchParams.append('max_price', maxPrice);
     if (minYear) query.searchParams.append('min_year', minYear);
 
     try {
         const response = await fetch(query);
+        if (!response.ok) throw new Error('Backend unreachable');
+        
         carData = await response.json();
         updateUI(carData);
     } catch (err) {
-        console.error("Connection failed:", err);
+        console.error("Search failed:", err);
+        list.innerHTML = "<div style='padding: 20px; color: red;'>Connection Error. Check backend status.</div>";
+    } finally {
+        list.style.opacity = "1";
     }
 }
 

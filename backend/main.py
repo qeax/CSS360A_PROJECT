@@ -62,29 +62,27 @@ MOCK_CARS = [
 
 @app.get("/cars")
 async def get_cars(
-    brand: Optional[str] = Query(None, description="Filter by brand"),
-    max_price: Optional[float] = Query(None, description="Maximum purchase price"),
-    min_year: Optional[int] = Query(None, description="Minimum production year")
+    brand: Optional[str] = Query(None),
+    max_price: Optional[float] = Query(None),
+    min_year: Optional[int] = Query(None)
 ):
     """
-    Returns filtered car list with calculated flip metrics.
-    Sorted by ROI descending.
+    Enhanced search logic to support the marketplace search button.
     """
     results = []
-    
     for car in MOCK_CARS:
-        # Apply filters provided by query parameters
-        if brand and car["brand"].lower() != brand.lower():
+        # Partial string match for brand search
+        if brand and brand.lower() not in car["brand"].lower():
             continue
         if max_price and car["price"] > max_price:
             continue
         if min_year and car["year"] < min_year:
             continue
             
-        # Add analysis data to the response object[cite: 3]
         analysis = calculate_flip_score(car["price"], car["resale_value"], car.get("repair_cost", 0))
         results.append({**car, **analysis})
     
+    # Sort by ROI descending to show best deals first
     return sorted(results, key=lambda x: x["roi"], reverse=True)
 
 @app.get("/health")

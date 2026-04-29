@@ -6,14 +6,12 @@
     <title>Car Flip Marketplace</title>
     <style>
         :root {
-            /* Soft light theme - not pure white */
-            --bg-page: #f1f5f9; 
-            --ui-white: #ffffff;
-            --accent-green: #059669; /* Dominant green */
-            --green-light: #ecfdf5;
-            --text-main: #1e293b;
-            --border-color: #cbd5e1;
-        }
+			--bg-page: #f1f5f9; 
+			--ui-white: #ffffff;
+			--accent-green: #059669; 
+			--border-green: #10b981; /* New subtle green for borders */
+			--border-soft: #cbd5e1;
+		}
 
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -35,12 +33,13 @@
 
         /* Marketplace Search Header */
         .search-header {
-            background: var(--ui-white);
-            padding: 24px;
-            border-radius: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
+			background: var(--ui-white);
+			padding: 24px;
+			border-radius: 16px;
+			box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+			margin-bottom: 20px;
+			border: 1px solid var(--border-green); /* Added green border */
+		}
 
         .search-row {
             display: flex;
@@ -91,13 +90,13 @@
 
         /* Scrollable List Area */
         .scroll-container {
-            flex: 1;
-            overflow-y: auto;
-            background: var(--ui-white);
-            border-radius: 16px;
-            padding: 10px;
-            border: 1px solid var(--border-color);
-        }
+			flex: 1;
+			overflow-y: auto;
+			background: var(--ui-white);
+			border-radius: 16px;
+			padding: 10px;
+			border: 1px solid var(--border-green); /* Added green border */
+		}
 
         .car-row {
             display: grid;
