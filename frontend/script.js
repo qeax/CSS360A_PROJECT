@@ -50,7 +50,7 @@ async function executeSearch() {
 function updateUI(items) {
     const list = document.getElementById('inventoryList');
     if (items.length === 0) {
-        list.innerHTML = "<div style='padding: 20px; text-align: center; color: #64748b;'>No vehicles found.</div>";
+        list.innerHTML = "<div style='padding: 20px; text-align: center;'>No matches found.</div>";
         return;
     }
 
@@ -62,9 +62,11 @@ function updateUI(items) {
                     <div class="car-name">${car.brand} ${car.model}</div>
                     <div class="car-sub">ID: #${car.id.toString().padStart(4, '0')}</div>
                 </div>
-                <div style="font-size: 14px;">${car.year}</div>
-                <div style="font-weight: 600;">$${car.price.toLocaleString()}</div>
-                <div class="roi-indicator" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30">
+                <div style="font-size: 14px; color: #64748b;">Year: ${car.year}</div>
+                <div style="font-weight: 700; color: var(--text-main);">$${car.price.toLocaleString()}</div>
+                
+                <!-- The ROI Heatmap Pill Element -->
+                <div class="roi-pill" style="background-color: ${color}; color: white; border-color: ${color};">
                     ${car.roi}% ROI
                 </div>
             </div>
