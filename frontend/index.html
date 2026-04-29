@@ -3,135 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Car Flip Analyzer - Light Edition</title>
+    <title>Car Flip Marketplace</title>
     <style>
         :root {
-            /* Background is the lightest element */
-            --bg-main: #ffffff; 
-            /* UI elements are slightly darker/distinct */
-            --ui-card: #f8fafc; 
-            --ui-border: #e2e8f0;
-            --text-dark: #0f172a;
-            --text-muted: #64748b;
+            /* Soft light theme - not pure white */
+            --bg-page: #f1f5f9; 
+            --ui-white: #ffffff;
+            --accent-green: #059669; /* Dominant green */
+            --green-light: #ecfdf5;
+            --text-main: #1e293b;
+            --border-color: #cbd5e1;
         }
 
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-dark);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
             margin: 0;
             display: flex;
             justify-content: center;
             height: 100vh;
         }
 
-        .app-container {
+        .marketplace-container {
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             display: flex;
             flex-direction: column;
-            padding: 40px 20px;
+            padding: 20px;
         }
 
-        header { margin-bottom: 24px; }
-
-        /* Filter styling */
-        .filter-section {
-            display: flex;
-            gap: 12px;
+        /* Marketplace Search Header */
+        .search-header {
+            background: var(--ui-white);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
 
-        input {
+        .search-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .search-main {
             flex: 1;
-            padding: 10px 14px;
-            border: 1px solid var(--ui-border);
-            border-radius: 8px;
-            background: var(--ui-card);
-        }
-
-        /* Scrollable List Container */
-        .list-wrapper {
-            flex-grow: 1;
-            overflow-y: auto; /* Enables vertical scrolling */
-            border: 1px solid var(--ui-border);
-            border-radius: 12px;
-            background: var(--ui-card);
-            padding: 8px;
-        }
-
-        /* Individual List Item */
-        .car-item {
-            display: grid;
-            grid-template-columns: 1fr 80px 100px 80px;
-            align-items: center;
             padding: 12px 16px;
-            margin-bottom: 4px;
-            background: white;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
-            border: 1px solid transparent;
+            font-size: 16px;
+        }
+
+        .search-main:focus {
+            border-color: var(--accent-green);
+            outline: none;
+        }
+
+        .btn-search {
+            background: var(--accent-green);
+            color: white;
+            border: none;
+            padding: 0 24px;
+            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: background 0.2s;
         }
 
-        .car-item:hover {
-            border-color: #cbd5e1;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        .btn-search:hover { background: #047857; }
+
+        .filters-row {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
         }
 
-        .car-info .model { font-weight: 600; }
-        .car-info .brand { font-size: 0.85em; color: var(--text-muted); }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
 
-        .year, .price { font-size: 0.9em; color: var(--text-dark); }
-
-        /* ROI Badge for Heatmap */
-        .roi-badge {
-            text-align: center;
-            font-weight: 800;
-            padding: 4px 8px;
+        .filter-group input {
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
             border-radius: 6px;
-            font-size: 0.85em;
+            width: 100px;
         }
 
-        /* Modal styling */
+        /* Scrollable List Area */
+        .scroll-container {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--ui-white);
+            border-radius: 16px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .car-row {
+            display: grid;
+            grid-template-columns: 1fr 100px 120px 100px;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--bg-page);
+            transition: background 0.1s;
+            cursor: pointer;
+        }
+
+        .car-row:hover { background: var(--green-light); }
+
+        .car-name { font-weight: 600; color: var(--text-main); }
+        .car-sub { font-size: 12px; color: #64748b; }
+
+        .roi-indicator {
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+            font-weight: 800;
+            font-size: 13px;
+        }
+
+        /* Modal */
         .modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4);
+            background: rgba(15, 23, 42, 0.5);
             backdrop-filter: blur(4px);
             justify-content: center; align-items: center;
         }
 
-        .modal-content {
-            background: white;
-            padding: 32px;
-            border-radius: 16px;
-            width: 400px;
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+        .modal-box {
+            background: var(--ui-white);
+            padding: 30px;
+            border-radius: 20px;
+            width: 450px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <header>
-            <h1>Vehicle Inventory</h1>
-            <div class="filter-section">
-                <input type="text" id="brandSearch" placeholder="Search brand...">
-                <input type="number" id="priceSearch" placeholder="Max price">
+    <div class="marketplace-container">
+        <header class="search-header">
+            <div class="search-row">
+                <input type="text" id="brandSearch" class="search-main" placeholder="Search by brand (e.g. Toyota, BMW)...">
+                <button class="btn-search" onclick="executeSearch()">Search</button>
+            </div>
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label>Max Price:</label>
+                    <input type="number" id="priceFilter" placeholder="$">
+                </div>
+                <div class="filter-group">
+                    <label>Min Year:</label>
+                    <input type="number" id="yearFilter" placeholder="2015">
+                </div>
             </div>
         </header>
 
-        <div class="list-wrapper" id="carList">
-            <!-- Scrollable content populated via JS -->
+        <div class="scroll-container" id="inventoryList">
+            <!-- Items injected by JS -->
         </div>
     </div>
 
-    <div id="detailModal" class="modal">
-        <div class="modal-content">
-            <h2 id="mTitle"></h2>
-            <div id="mBody"></div>
-            <button onclick="closeModal()" style="margin-top: 20px; width: 100%; padding: 10px; cursor:pointer;">Close</button>
+    <div id="itemModal" class="modal">
+        <div class="modal-box">
+            <h2 id="modalHeader" style="color: var(--accent-green)"></h2>
+            <div id="modalContent"></div>
+            <button onclick="hideModal()" style="margin-top: 20px; width: 100%; padding: 12px; border:none; background: #e2e8f0; border-radius: 8px; cursor:pointer;">Close</button>
         </div>
     </div>
 

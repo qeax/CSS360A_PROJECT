@@ -1,57 +1,61 @@
 /**
- * Global store for the current vehicle list
+ * Local cache of car data
  */
-let vehicles = [];
+let carData = [];
 
 /**
- * Maps ROI value to a color gradient (Heatmap)
- * Red (0°) for low/negative -> Green (120°) for high ROI
+ * Heatmap logic: Red to Green based on ROI
  */
-function getHeatmapColor(roi) {
-    // Clamp value between 0 and 30 for the gradient scale
-    const weight = Math.min(Math.max(roi, 0), 30);
-    const hue = (weight / 30) * 120; 
-    return `hsl(${hue}, 70%, 50%)`;
+function calculateHeatmap(roi) {
+    const score = Math.min(Math.max(roi, 0), 30);
+    const hue = (score / 30) * 120; // 0 is red, 120 is green
+    return `hsl(${hue}, 70%, 45%)`;
 }
 
 /**
- * Fetch data from backend API with filters
+ * Primary search function triggered by button or Enter key
  */
-async function loadVehicles() {
+async function executeSearch() {
     const brand = document.getElementById('brandSearch').value;
-    const price = document.getElementById('priceSearch').value;
+    const maxPrice = document.getElementById('priceFilter').value;
+    const minYear = document.getElementById('yearFilter').value;
 
-    const url = new URL('/api/cars', window.location.origin);
-    if (brand) url.searchParams.append('brand', brand);
-    if (price) url.searchParams.append('max_price', price);
+    const query = new URL('/api/cars', window.location.origin);
+    if (brand) query.searchParams.append('brand', brand);
+    if (maxPrice) query.searchParams.append('max_price', maxPrice);
+    if (minYear) query.searchParams.append('min_year', minYear);
 
     try {
-        const response = await fetch(url);
-        vehicles = await response.json();
-        renderTable(vehicles);
+        const response = await fetch(query);
+        carData = await response.json();
+        updateUI(carData);
     } catch (err) {
-        console.error("API Error:", err);
+        console.error("Connection failed:", err);
     }
 }
 
 /**
- * Renders the scrollable list entries
+ * Updates the scrollable list with new results
  */
-function renderTable(data) {
-    const container = document.getElementById('carList');
-    
-    container.innerHTML = data.map(car => {
-        const roiColor = getHeatmapColor(car.roi);
+function updateUI(items) {
+    const list = document.getElementById('inventoryList');
+    if (items.length === 0) {
+        list.innerHTML = "<div style='padding: 20px; text-align: center; color: #64748b;'>No vehicles found.</div>";
+        return;
+    }
+
+    list.innerHTML = items.map(car => {
+        const color = calculateHeatmap(car.roi);
         return `
-            <div class="car-item" onclick="showDetails(${car.id})">
-                <div class="car-info">
-                    <div class="model">${car.model}</div>
-                    <div class="brand">${car.brand}</div>
+            <div class="car-row" onclick="viewDetails(${car.id})">
+                <div>
+                    <div class="car-name">${car.brand} ${car.model}</div>
+                    <div class="car-sub">ID: #${car.id.toString().padStart(4, '0')}</div>
                 </div>
-                <div class="year">${car.year}</div>
-                <div class="price">$${car.price.toLocaleString()}</div>
-                <div class="roi-badge" style="background: ${roiColor}20; color: ${roiColor}">
-                    ${car.roi}%
+                <div style="font-size: 14px;">${car.year}</div>
+                <div style="font-weight: 600;">$${car.price.toLocaleString()}</div>
+                <div class="roi-indicator" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30">
+                    ${car.roi}% ROI
                 </div>
             </div>
         `;
@@ -59,37 +63,37 @@ function renderTable(data) {
 }
 
 /**
- * Modal control
+ * Modal interactions
  */
-function showDetails(id) {
-    const car = vehicles.find(v => v.id === id);
+function viewDetails(id) {
+    const car = carData.find(c => c.id === id);
     if (!car) return;
 
-    document.getElementById('mTitle').innerText = `${car.brand} ${car.model}`;
-    document.getElementById('mBody').innerHTML = `
-        <p>Year: ${car.year}</p>
-        <p>Purchase: $${car.price.toLocaleString()}</p>
-        <p>Repairs: $${car.repair_cost.toLocaleString()}</p>
-        <hr style="border:0; border-top:1px solid #eee">
-        <h3>Estimated Profit: $${car.net_profit.toLocaleString()}</h3>
+    document.getElementById('modalHeader').innerText = `${car.brand} ${car.model}`;
+    document.getElementById('modalContent').innerHTML = `
+        <p><strong>Year:</strong> ${car.year}</p>
+        <p><strong>Purchase Price:</strong> $${car.price.toLocaleString()}</p>
+        <p><strong>Repair Estimate:</strong> $${car.repair_cost.toLocaleString()}</p>
+        <p><strong>Resale Value:</strong> $${car.resale_value.toLocaleString()}</p>
+        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 15px 0;">
+        <div style="background: #f8fafc; padding: 15px; border-radius: 10px;">
+            <h3 style="margin: 0; color: #059669;">Net Profit: $${car.net_profit.toLocaleString()}</h3>
+            <p style="margin: 5px 0 0 0; font-size: 14px; color: #64748b;">ROI calculation: ${(car.roi).toFixed(1)}%</p>
+        </div>
     `;
-    document.getElementById('detailModal').style.display = 'flex';
+    document.getElementById('itemModal').style.display = 'flex';
 }
 
-function closeModal() {
-    document.getElementById('detailModal').style.display = 'none';
+function hideModal() {
+    document.getElementById('itemModal').style.display = 'none';
 }
 
 /**
- * Debounced search event listeners
+ * Handle "Enter" key on the search bar
  */
-let timer;
-document.querySelectorAll('input').forEach(el => {
-    el.addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(loadVehicles, 300);
-    });
+document.getElementById('brandSearch').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') executeSearch();
 });
 
-// Initial load on startup
-loadVehicles();
+// Initial load
+executeSearch();
