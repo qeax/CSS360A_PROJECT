@@ -82,6 +82,12 @@
     </div>
 
     <script>
+
+        function calculateHeatmap(roi) {
+            const score = Math.min(Math.max(roi, 0), 30);
+            const hue = (score / 30) * 120; // 0 = Red, 120 = Green
+            return `hsl(${hue}, 70%, 45%)`;
+        }
         async function executeSearch() {
             const params = new URLSearchParams();
             // Collect all values
@@ -107,18 +113,26 @@
                     return;
                 }
 
-                list.innerHTML = cars.map(car => `
+                list.innerHTML = cars.map(car => {
+                const heatmapColor = calculateHeatmap(car.roi);
+
+                return `
                     <div class="car-row" onclick="showDetails('${car.brand} ${car.model}', ${car.price}, ${car.resale_value}, ${car.repair_cost}, ${car.net_profit}, ${car.roi}, '${car.condition}')">
                         <div>
                             <div class="car-name">${car.brand} ${car.model}</div>
                             <div class="car-sub">${car.year} • ${car.condition}</div>
                         </div>
                         <div class="price-col">$${car.price.toLocaleString()}</div>
-                        <div class="roi-pill">${car.roi}% ROI</div>
+                        
+                        <div class="roi-pill" style="background-color: ${heatmapColor}; color: white; border-color: ${heatmapColor};">
+                            ${car.roi}% ROI
+                        </div>
+                        
                         <div class="roi-pill" style="background:#f0fdf4; border-color:#a7f3d0;">+$${car.net_profit.toLocaleString()}</div>
-                        <div style="text-align:right; color:#64748b; font-size:0.9em;">Click for details</div>
+                        <div style="text-align:right; color:#64748b; font-size:0.9em;">Details →</div>
                     </div>
-                `).join('');
+                `;
+            }).join('');
             } catch (err) {
                 list.innerHTML = '<div class="loading">Error loading data.</div>';
             }
