@@ -1,83 +1,95 @@
 /**
- * Global state for loaded vehicles
+ * Global store for the current vehicle list
  */
-let currentData = [];
+let vehicles = [];
 
 /**
- * Fetches car data from the backend with current filter values
+ * Maps ROI value to a color gradient (Heatmap)
+ * Red (0°) for low/negative -> Green (120°) for high ROI
  */
-async function fetchCars() {
-    const brand = document.getElementById('brandInput').value;
-    const maxPrice = document.getElementById('priceInput').value;
-    const minYear = document.getElementById('yearInput').value;
+function getHeatmapColor(roi) {
+    // Clamp value between 0 and 30 for the gradient scale
+    const weight = Math.min(Math.max(roi, 0), 30);
+    const hue = (weight / 30) * 120; 
+    return `hsl(${hue}, 70%, 50%)`;
+}
 
-    // Build URL with query parameters[cite: 8]
+/**
+ * Fetch data from backend API with filters
+ */
+async function loadVehicles() {
+    const brand = document.getElementById('brandSearch').value;
+    const price = document.getElementById('priceSearch').value;
+
     const url = new URL('/api/cars', window.location.origin);
     if (brand) url.searchParams.append('brand', brand);
-    if (maxPrice) url.searchParams.append('max_price', maxPrice);
-    if (minYear) url.searchParams.append('min_year', minYear);
+    if (price) url.searchParams.append('max_price', price);
 
     try {
         const response = await fetch(url);
-        currentData = await response.json();
-        renderList(currentData);
-    } catch (error) {
-        console.error("Data fetching failed:", error);
+        vehicles = await response.json();
+        renderTable(vehicles);
+    } catch (err) {
+        console.error("API Error:", err);
     }
 }
 
 /**
- * Renders the list of car cards into the grid
+ * Renders the scrollable list entries
  */
-function renderList(cars) {
-    const container = document.getElementById('cars');
-    if (cars.length === 0) {
-        container.innerHTML = "<p>No matches found.</p>";
-        return;
-    }
-
-    container.innerHTML = cars.map(car => `
-        <div class="car-card" onclick="openModal(${car.id})">
-            <div style="color: var(--text-secondary); font-size: 0.8em;">${car.year}</div>
-            <h3 style="margin: 5px 0;">${car.brand} ${car.model}</h3>
-            <div>$${car.price.toLocaleString()}</div>
-            <div class="roi-tag">ROI: ${car.roi}%</div>
-        </div>
-    `).join('');
+function renderTable(data) {
+    const container = document.getElementById('carList');
+    
+    container.innerHTML = data.map(car => {
+        const roiColor = getHeatmapColor(car.roi);
+        return `
+            <div class="car-item" onclick="showDetails(${car.id})">
+                <div class="car-info">
+                    <div class="model">${car.model}</div>
+                    <div class="brand">${car.brand}</div>
+                </div>
+                <div class="year">${car.year}</div>
+                <div class="price">$${car.price.toLocaleString()}</div>
+                <div class="roi-badge" style="background: ${roiColor}20; color: ${roiColor}">
+                    ${car.roi}%
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 /**
- * Handles modal display logic
+ * Modal control
  */
-function openModal(id) {
-    const car = currentData.find(c => c.id === id);
+function showDetails(id) {
+    const car = vehicles.find(v => v.id === id);
     if (!car) return;
 
-    document.getElementById('modalTitle').innerText = `${car.brand} ${car.model}`;
-    document.getElementById('modalBody').innerHTML = `
+    document.getElementById('mTitle').innerText = `${car.brand} ${car.model}`;
+    document.getElementById('mBody').innerHTML = `
+        <p>Year: ${car.year}</p>
         <p>Purchase: $${car.price.toLocaleString()}</p>
         <p>Repairs: $${car.repair_cost.toLocaleString()}</p>
-        <p>Resale: $${car.resale_value.toLocaleString()}</p>
-        <hr style="border: 0; border-top: 1px solid #334155;">
-        <h3 style="color: var(--accent)">Profit: $${car.net_profit.toLocaleString()}</h3>
+        <hr style="border:0; border-top:1px solid #eee">
+        <h3>Estimated Profit: $${car.net_profit.toLocaleString()}</h3>
     `;
-    document.getElementById('carModal').style.display = 'flex';
+    document.getElementById('detailModal').style.display = 'flex';
 }
 
 function closeModal() {
-    document.getElementById('carModal').style.display = 'none';
+    document.getElementById('detailModal').style.display = 'none';
 }
 
 /**
- * Event listeners with basic debounce for inputs[cite: 8]
+ * Debounced search event listeners
  */
-let debounceTimer;
-['brandInput', 'priceInput', 'yearInput'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(fetchCars, 400);
+let timer;
+document.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(loadVehicles, 300);
     });
 });
 
-// Initial data load
-fetchCars();
+// Initial load on startup
+loadVehicles();

@@ -3,71 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Car Flip Analyzer</title>
+    <title>Car Flip Analyzer - Light Edition</title>
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --card-bg: #1e293b;
-            --accent: #10b981;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
+            /* Background is the lightest element */
+            --bg-main: #ffffff; 
+            /* UI elements are slightly darker/distinct */
+            --ui-card: #f8fafc; 
+            --ui-border: #e2e8f0;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-dark);
             margin: 0;
-            padding: 20px;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
         }
 
-        .container { max-width: 1200px; margin: 0 auto; }
+        .app-container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            padding: 40px 20px;
+        }
 
-        /* Header and Filter sections */
-        .filter-bar {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #334155;
-            margin-bottom: 30px;
+        header { margin-bottom: 24px; }
+
+        /* Filter styling */
+        .filter-section {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
         }
 
         input {
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: white;
-            padding: 10px;
-            border-radius: 6px;
-            outline: none;
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--ui-border);
+            border-radius: 8px;
+            background: var(--ui-card);
         }
 
-        input:focus { border-color: var(--accent); }
+        /* Scrollable List Container */
+        .list-wrapper {
+            flex-grow: 1;
+            overflow-y: auto; /* Enables vertical scrolling */
+            border: 1px solid var(--ui-border);
+            border-radius: 12px;
+            background: var(--ui-card);
+            padding: 8px;
+        }
 
-        /* Main results grid[cite: 9] */
-        .car-grid {
+        /* Individual List Item */
+        .car-item {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .car-card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #334155;
+            grid-template-columns: 1fr 80px 100px 80px;
+            align-items: center;
+            padding: 12px 16px;
+            margin-bottom: 4px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid transparent;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.2s;
         }
 
-        .car-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+        .car-item:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
 
-        .roi-tag {
-            color: var(--accent);
-            font-weight: bold;
-            font-size: 0.9em;
+        .car-info .model { font-weight: 600; }
+        .car-info .brand { font-size: 0.85em; color: var(--text-muted); }
+
+        .year, .price { font-size: 0.9em; color: var(--text-dark); }
+
+        /* ROI Badge for Heatmap */
+        .roi-badge {
+            text-align: center;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85em;
         }
 
         /* Modal styling */
@@ -75,37 +98,40 @@
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85);
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
             justify-content: center; align-items: center;
         }
 
         .modal-content {
-            background: var(--card-bg);
-            padding: 30px;
-            border-radius: 12px;
-            width: 90%; max-width: 450px;
+            background: white;
+            padding: 32px;
+            border-radius: 16px;
+            width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app-container">
         <header>
-            <h1 style="color: var(--accent)">Flip Analyzer</h1>
-            <div class="filter-bar">
-                <input type="text" id="brandInput" placeholder="Brand name">
-                <input type="number" id="priceInput" placeholder="Max price">
-                <input type="number" id="yearInput" placeholder="Min year">
+            <h1>Vehicle Inventory</h1>
+            <div class="filter-section">
+                <input type="text" id="brandSearch" placeholder="Search brand...">
+                <input type="number" id="priceSearch" placeholder="Max price">
             </div>
         </header>
 
-        <main id="cars" class="car-grid">Loading vehicles...</main>
+        <div class="list-wrapper" id="carList">
+            <!-- Scrollable content populated via JS -->
+        </div>
     </div>
 
-    <div id="carModal" class="modal">
+    <div id="detailModal" class="modal">
         <div class="modal-content">
-            <h2 id="modalTitle" style="margin-top: 0;"></h2>
-            <div id="modalBody"></div>
-            <button onclick="closeModal()" style="margin-top: 20px; cursor: pointer;">Close</button>
+            <h2 id="mTitle"></h2>
+            <div id="mBody"></div>
+            <button onclick="closeModal()" style="margin-top: 20px; width: 100%; padding: 10px; cursor:pointer;">Close</button>
         </div>
     </div>
 
