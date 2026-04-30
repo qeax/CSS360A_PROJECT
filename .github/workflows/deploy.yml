@@ -53,6 +53,14 @@ jobs:
             docker compose ps
 
             echo "=== Smoke Checks ==="
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS https://css360.qeax.cloud/api/health >/tmp/health.json; then
+                break
+              fi
+              echo "Health check attempt ${attempt}/10 failed, waiting 6s..."
+              sleep 6
+            done
+
             curl -fsS https://css360.qeax.cloud/api/health >/tmp/health.json
             cat /tmp/health.json
             
