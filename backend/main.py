@@ -25,7 +25,6 @@ def calculate_flip_score(purchase_price: float, resale_value: float, repair_cost
         "is_profitable": net_profit > 0
     }
 
-# Extended mock database (30 items)[cite: 3]
 # Complete list of 30 cars for the backend database
 MOCK_CARS = [
     {"id": 1, "brand": "Toyota", "model": "Camry", "year": 2018, "price": 12000, "repair_cost": 800, "resale_value": 14500},
@@ -38,7 +37,7 @@ MOCK_CARS = [
     {"id": 8, "brand": "Audi", "model": "A4", "year": 2017, "price": 15500, "repair_cost": 1800, "resale_value": 19000},
     {"id": 9, "brand": "Hyundai", "model": "Elantra", "year": 2020, "price": 14000, "repair_cost": 300, "resale_value": 16500},
     {"id": 10, "brand": "Kia", "model": "Optima", "year": 2019, "price": 12500, "repair_cost": 600, "resale_value": 14800},
-    {"id": 11, "brand": "Subaru", "model": "Impreza", "year": 2016, "price": 9800, "repair_cost": 1100, "resale_value": 12500},
+    {"id": 11, "brand": "Subaru", "model": "Impreza", "year": 2016, "price": 13000, "repair_cost": 1100, "resale_value": 12500},
     {"id": 12, "brand": "Volkswagen", "model": "Jetta", "year": 2015, "price": 6500, "repair_cost": 1400, "resale_value": 9000},
     {"id": 13, "brand": "Mazda", "model": "CX-5", "year": 2018, "price": 17500, "repair_cost": 800, "resale_value": 20500},
     {"id": 14, "brand": "Lexus", "model": "RX 350", "year": 2014, "price": 14000, "repair_cost": 2500, "resale_value": 19500},
@@ -47,8 +46,8 @@ MOCK_CARS = [
     {"id": 17, "brand": "Volvo", "model": "S60", "year": 2015, "price": 8000, "repair_cost": 1800, "resale_value": 11500},
     {"id": 18, "brand": "Porsche", "model": "Macan", "year": 2016, "price": 25000, "repair_cost": 4500, "resale_value": 34000},
     {"id": 19, "brand": "GMC", "model": "Sierra", "year": 2018, "price": 23000, "repair_cost": 1200, "resale_value": 27000},
-    {"id": 20, "brand": "Dodge", "model": "Charger", "year": 2019, "price": 16000, "repair_cost": 2200, "resale_value": 20500},
-    {"id": 21, "brand": "Ram", "model": "1500", "year": 2017, "price": 20000, "repair_cost": 1800, "resale_value": 25000},
+    {"id": 20, "brand": "Dodge", "model": "Charger", "year": 2019, "price": 25000, "repair_cost": 2200, "resale_value": 20500},
+    {"id": 21, "brand": "Ram", "model": "1500", "year": 2017, "price": 24950, "repair_cost": 1800, "resale_value": 25000},
     {"id": 22, "brand": "Land Rover", "model": "Discovery", "year": 2016, "price": 18000, "repair_cost": 5500, "resale_value": 24000},
     {"id": 23, "brand": "Jaguar", "model": "XF", "year": 2015, "price": 12000, "repair_cost": 4000, "resale_value": 17500},
     {"id": 24, "brand": "Mini", "model": "Cooper", "year": 2014, "price": 5500, "repair_cost": 2100, "resale_value": 9000},
@@ -56,7 +55,7 @@ MOCK_CARS = [
     {"id": 26, "brand": "Cadillac", "model": "CTS", "year": 2016, "price": 14500, "repair_cost": 3200, "resale_value": 19000},
     {"id": 27, "brand": "Infiniti", "model": "Q50", "year": 2017, "price": 15000, "repair_cost": 1500, "resale_value": 18500},
     {"id": 28, "brand": "Acura", "model": "TLX", "year": 2019, "price": 21000, "repair_cost": 400, "resale_value": 24500},
-    {"id": 29, "brand": "Mitsubishi", "model": "Outlander", "year": 2015, "price": 6000, "repair_cost": 1300, "resale_value": 8500},
+    {"id": 29, "brand": "Mitsubishi", "model": "Outlander", "year": 2015, "price": 8900, "repair_cost": 1300, "resale_value": 8500},
     {"id": 30, "brand": "Nissan", "model": "Maxima", "year": 2020, "price": 16500, "repair_cost": 400, "resale_value": 18500}
 ]
 
