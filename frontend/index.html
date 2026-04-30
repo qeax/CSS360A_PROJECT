@@ -7,154 +7,228 @@
     <style>
         :root {
             --bg-page: #24262b; 
-            --ui-white: #313338;
+            --ui-bg: #313338;
             --accent-green: #059669; 
-            --border-green: #10b981;
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             --text-main: #eef1f7;
-            --border-color: #10b981;
-            --border-soft: #10b981  ;
-            --green-light: #4b4b54;
+            --text-muted: #94a3b8;
+            --border-color: #4b4b54;
+            --card-hover: #3f4147;
+            --separator: #4b4b54;
         }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: var(--bg-page); color: var(--text-main); margin: 0; display: flex; justify-content: center; height: 100vh; }
-        .marketplace-container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; padding: 20px; }
+		
+		body.light-theme {
+            --bg-page: #f1f5f9; 
+            --ui-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #cbd5e1;
+            --card-hover: #f8fafc;
+            --separator: #e2e8f0;
+        }
+		
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-page); color: var(--text-main); transition: background-color 0.3s; margin: 0; padding: 20px;}
         
+		.marketplace-container { max-width: 1100px; margin: 0 auto; }
+		
         /* Header */
-        .search-header { background: var(--ui-white); padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 20px; border: 1px solid var(--border-green); }
-        .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px; }
-        .input-group label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
-        .input-group input, .input-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; box-sizing: border-box; background-color: #4b4b54; color: white; }
-        .input-group input:focus { border-color: var(--accent-green); outline: none; }
+        .header-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .theme-toggle { background: var(--ui-bg); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .theme-toggle:hover { background: var(--card-hover); }
         
-        .btn-search { background: var(--accent-green); color: #4b4b54; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s; }
+        .search-header { background: var(--ui-bg); padding: 24px; border-radius: 16px; margin-bottom: 20px; border: 1px solid var(--accent-green); }
+        .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .input-group input, .input-group select { width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-page); color: var(--text-main); transition: border-color 0.2s; }
+        .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--accent-green); }
+        
+        .btn-search { background: var(--accent-green); color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s; }
         .btn-search:hover { background: #047857; }
 
-        /* List */
-        .scroll-container { flex: 1; overflow-y: auto; padding: 5px; }
-        .car-row { display: grid; grid-template-columns: 1fr 100px 120px 120px 120px; align-items: center; padding: 16px; background: var(--ui-white); margin-bottom: 12px; border-radius: 12px; border: 1px solid var(--border-soft); box-shadow: var(--shadow-sm); transition: all 0.2s ease; cursor: pointer; gap: 17px; }
-        .car-row:hover { transform: translateY(-2px); border-color: #27e9a8; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); background: var(--green-light); }
-        .car-name { font-weight: 600; font-size: 1.1em; }
-        .car-sub { font-size: 12px; color: #64748b; }
-        .price-col { text-align: right; font-weight: 600; }
-        .roi-pill { display: flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 50px; font-weight: 800; font-size: 14px; border: 2px solid #47534d; background: #047857; color: white; }
-        .loading { text-align: center; padding: 40px; color: #64748b; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
-        .modal-box { background: var(--ui-white); padding: 30px; border-radius: 20px; width: 450px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        /* Sort Controls */
+        .sort-controls { 
+            display: flex; 
+            gap: 10px; 
+            align-items: center; 
+            margin-bottom: 20px; 
+            padding: 12px; 
+            background: var(--ui-bg); 
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .sort-controls label { font-size: 14px; color: var(--text-muted); margin-right: 8px; }
+        .sort-controls select { 
+            padding: 6px 12px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 6px; 
+            background: var(--bg-page); 
+            color: var(--text-main);
+            cursor: pointer;
+        }
+
+        /* Car Cards */
+        .car-card {
+            display: flex;
+            gap: 20px;
+            background: var(--ui-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .car-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(5, 150, 105, 0.15);
+            border-color: var(--accent-green);
+        }
+        
+        .car-image {
+            flex-shrink: 0;
+            width: 200px;
+            height: 150px;
+            background: var(--bg-page);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border: 2px dashed var(--border-color);
+        }
+        
+        .car-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .car-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .car-model {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        
+        .car-year-pill {
+            background: var(--accent-green);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .separator {
+            height: 1px;
+            background: var(--separator);
+            margin: 12px 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(110px, 1fr));
+            gap: 16px;
+        }
+        
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        
+        .roi-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 14px;
+            border: 2px solid;
+            color: white;
+            text-align: center;
+        }
+        
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+        .no-results { text-align: center; padding: 40px; color: var(--text-muted); }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; z-index: 1000; }
+        .modal.active { display: flex; }
+        .modal-box { background: var(--ui-bg); padding: 30px; border-radius: 20px; width: 450px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); }
+
+        @media (max-width: 920px) {
+            .stats-grid { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+            .car-card { flex-direction: column; }
+            .car-image { width: 100%; height: 180px; }
+        }
     </style>
 </head>
 <body>
     <div class="marketplace-container">
+        <div class="header-controls">
+            <h2 style="margin:0;">Car Flip Dashboard</h2>
+            <button class="theme-toggle" id="themeToggleBtn">Toggle Theme</button>
+        </div>
+
         <header class="search-header">
-            <h3 style="margin-top:0; color:#eef1f7;"> Advanced Search</h3>
             <div class="search-grid">
-                <div class="input-group"><label>Make (e.g. Toyota)</label><input type="text" id="makeSearch" placeholder="Make..."></div>
-                <div class="input-group"><label>Model (e.g. Camry)</label><input type="text" id="modelSearch" placeholder="Model..."></div>
-                <div class="input-group"><label>Min Year</label><input type="number" id="minYear" placeholder="2015"></div>
-                <div class="input-group"><label>Max Year</label><input type="number" id="maxYear" placeholder="2024"></div>
-                <div class="input-group">
-                    <label>Condition</label>
-                    <select id="conditionFilter">
-                        <option value="">Any</option>
-                        <option value="Excellent">Excellent</option>
-                        <option value="Good">Good</option>
-                        <option value="Fair">Fair</option>
-                        <option value="Poor">Poor</option>
-                    </select>
-                </div>
+                <div class="input-group"><label>Make</label><input type="text" id="makeSearch" placeholder="Toyota, Honda..."></div>
+                <div class="input-group"><label>Model</label><input type="text" id="modelSearch" placeholder="Camry, Civic..."></div>
                 <div class="input-group"><label>Max Price</label><input type="number" id="maxPrice" placeholder="20000"></div>
-                <div class="input-group"><label>Min Profit</label><input type="number" id="minProfit" placeholder="1000"></div>
-                <div class="input-group"><label>Min ROI %</label><input type="number" id="minRoi" placeholder="10"></div>
             </div>
-            <button class="btn-search" onclick="executeSearch()">Search Inventory</button>
+            <div class="action-row">
+                <button class="btn-search" id="searchBtn">Search Inventory</button>
+            </div>
         </header>
 
-        <div class="scroll-container" id="inventoryList">
-            <div class="loading">Loading marketplace inventory...</div>
+        <!-- Frontend Sort Controls -->
+        <div class="sort-controls">
+            <label>Sort Results:</label>
+            <select id="frontendSortBy">
+                <option value="roi">ROI %</option>
+                <option value="net_profit">Net Profit</option>
+                <option value="price">Purchase Price</option>
+            </select>
+            <select id="frontendSortOrder">
+                <option value="desc">Highest First</option>
+                <option value="asc">Lowest First</option>
+            </select>
         </div>
+
+        <div id="inventoryList"></div>
     </div>
 
     <div id="itemModal" class="modal">
         <div class="modal-box">
             <h2 id="modalHeader" style="color: var(--accent-green); margin-top:0;"></h2>
             <div id="modalContent"></div>
-            <button onclick="hideModal()" style="margin-top: 20px; width: 100%; padding: 12px; border:none; background: #e2e8f0; border-radius: 8px; cursor:pointer;">Close</button>
+            <button id="closeModalBtn" style="margin-top: 20px; width: 100%; padding: 12px; border:none; background: #e2e8f0; border-radius: 8px; cursor:pointer; font-weight: 600;">Close</button>
         </div>
     </div>
 
-    <script>
-
-        function calculateHeatmap(roi, brightness, saturation) {
-            const score = Math.min(Math.max(roi, 0), 30);
-            const hue = (score / 30) * 120; // 0 = Red, 120 = Green
-            return `hsl(${hue}, ${saturation}%, ${brightness}%)`;
-        }
-        async function executeSearch() {
-            const params = new URLSearchParams();
-            // Collect all values
-            if (document.getElementById('makeSearch').value) params.append('make', document.getElementById('makeSearch').value);
-            if (document.getElementById('modelSearch').value) params.append('model', document.getElementById('modelSearch').value);
-            if (document.getElementById('minYear').value) params.append('min_year', document.getElementById('minYear').value);
-            if (document.getElementById('maxYear').value) params.append('max_year', document.getElementById('maxYear').value);
-            if (document.getElementById('conditionFilter').value) params.append('condition', document.getElementById('conditionFilter').value);
-            if (document.getElementById('maxPrice').value) params.append('max_price', document.getElementById('maxPrice').value);
-            if (document.getElementById('minProfit').value) params.append('min_profit', document.getElementById('minProfit').value);
-            if (document.getElementById('minRoi').value) params.append('min_roi', document.getElementById('minRoi').value);
-
-            const list = document.getElementById('inventoryList');
-            list.innerHTML = '<div class="loading">Searching inventory...</div>';
-
-            try {
-                const res = await fetch(`/cars?${params.toString()}`);
-                if (!res.ok) throw new Error('Failed to fetch data');
-                const cars = await res.json();
-
-                if (cars.length === 0) {
-                    list.innerHTML = '<div class="loading">No matches found. Try adjusting filters.</div>';
-                    return;
-                }
-
-                list.innerHTML = cars.map(car => {
-                const heatmapColor = calculateHeatmap(car.roi, 50, 55);
-                const heatmapColorBg = calculateHeatmap(car.roi, 67, 50);
-
-                return `
-                    <div class="car-row" onclick="showDetails('${car.brand} ${car.model}', ${car.price}, ${car.resale_value}, ${car.repair_cost}, ${car.net_profit}, ${car.roi}, '${car.condition}')">
-                        <div>
-                            <div class="car-name">${car.brand} ${car.model}</div>
-                            <div class="car-sub">${car.year} • ${car.condition}</div>
-                        </div>
-                        <div class="price-col">$${car.price.toLocaleString()}</div>
-                        
-                        <div class="roi-pill" style="background-color: ${heatmapColor}; color: white; border: 2px solid ${heatmapColorBg};">
-                            ${car.roi}% ROI
-                        </div>
-                        
-                        <div class="roi-pill" style="background:#059669; border: 2px solid #10b981;">+$${car.net_profit.toLocaleString()}</div>
-                        <div style="text-align:right; color:#64748b; font-size:0.9em;">Details →</div>
-                    </div>
-                `;
-            }).join('');
-            } catch (err) {
-                list.innerHTML = '<div class="loading">Error loading data.</div>';
-            }
-        }
-
-        function showDetails(name, price, resale, repair, profit, roi, condition) {
-            document.getElementById('modalHeader').textContent = name;
-            document.getElementById('modalContent').innerHTML = `
-                <p><strong>Purchase Price:</strong> $${price.toLocaleString()}</p>
-                <p><strong>Est. Resale Value:</strong> $${resale.toLocaleString()}</p>
-                <p><strong>Repair Cost:</strong> $${repair.toLocaleString()}</p>
-                <p><strong>Condition:</strong> ${condition}</p>
-                <hr style="margin:15px 0; border:0; border-top:1px solid #e2e8f0;">
-                <p style="font-size:1.2em; color:#059669;"><strong>Net Profit:</strong> $${profit.toLocaleString()}</p>
-                <p style="font-size:1.2em; color:#059669;"><strong>ROI:</strong> ${roi}%</p>
-            `;
-            document.getElementById('itemModal').style.display = 'flex';
-        }
-
-        function hideModal() { document.getElementById('itemModal').style.display = 'none'; }
-        executeSearch(); // Initial load
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>

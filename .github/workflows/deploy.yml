@@ -13,14 +13,33 @@ jobs:
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
+        env:
+          APP_ENV: production
+          DB_HOST: db
+          DB_PORT: 3306
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: APP_ENV,DB_HOST,DB_PORT,DB_NAME,DB_USER,DB_PASSWORD,MYSQL_ROOT_PASSWORD
           script: |
             set -e
             
             cd /home/ubuntu/projects/css360
+
+            cat > .env <<EOF
+            APP_ENV=${APP_ENV}
+            DB_HOST=${DB_HOST}
+            DB_PORT=${DB_PORT}
+            DB_NAME=${DB_NAME}
+            DB_USER=${DB_USER}
+            DB_PASSWORD=${DB_PASSWORD}
+            MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            EOF
             
             docker network create proxy_network || true
             
@@ -32,6 +51,10 @@ jobs:
             
             echo "=== Deployment Status ==="
             docker compose ps
+
+            echo "=== Smoke Checks ==="
+            curl -fsS https://css360.qeax.cloud/api/health >/tmp/health.json
+            cat /tmp/health.json
             
             echo "=== Recent Logs ==="
             docker compose logs --tail=50

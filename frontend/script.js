@@ -1,111 +1,258 @@
 /**
- * Local cache of car data
+ * CSS360 Car Flip Dashboard - Frontend Logic
  */
-let carData = [];
 
-/**
- * Heatmap logic: Red to Green based on ROI
- */
-function calculateHeatmap(roi) {
-    const score = Math.min(Math.max(roi, 0), 30);
-    const hue = (score / 30) * 120; // 0 is red, 120 is green
-    return `hsl(${hue}, 70%, 45%)`;
+// Global state
+let carData = [];
+let currentResults = [];
+
+// ============= THEME MANAGEMENT =============
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    const isLight = document.body.classList.contains('light-theme');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
 
-/**
- * Primary search function triggered by button or Enter key
- */
+// Load saved theme on startup
+function initTheme() {
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-theme');
+    }
+}
+
+// ============= HEATMAP CALCULATION =============
+function calculateHeatmap(roi, brightness = 45, saturation = 70) {
+    const score = Math.min(Math.max(roi, 0), 30);
+    const hue = (score / 30) * 120; // 0 = red, 120 = green
+    return `hsl(${hue}, ${saturation}%, ${brightness}%)`;
+}
+
+// ============= API SEARCH =============
 async function executeSearch() {
     const list = document.getElementById('inventoryList');
-    const brand = document.getElementById('brandSearch').value;
-    const maxPrice = document.getElementById('priceFilter').value;
-    const minYear = document.getElementById('yearFilter').value;
+    
+    // Collect filter values
+    const make = document.getElementById('makeSearch').value.trim();
+    const model = document.getElementById('modelSearch').value.trim();
+    const maxPrice = document.getElementById('maxPrice').value.trim();
 
-    // Visual feedback for search button press
+    // Loading state
     list.style.opacity = "0.5";
+    list.innerHTML = '<div class="loading">Loading inventory...</div>';
 
+    // Build query URL
     const query = new URL('/api/cars', window.location.origin);
-    // Append parameters only if they have values[cite: 8]
-    if (brand) query.searchParams.append('brand', brand);
+    
+    if (make) query.searchParams.append('make', make);
+    if (model) query.searchParams.append('model', model);
     if (maxPrice) query.searchParams.append('max_price', maxPrice);
-    if (minYear) query.searchParams.append('min_year', minYear);
 
     try {
         const response = await fetch(query);
-        if (!response.ok) throw new Error('Backend unreachable');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         carData = await response.json();
-        updateUI(carData);
+        currentResults = [...carData]; // Clone for frontend sorting
+        sortResults();
     } catch (err) {
         console.error("Search failed:", err);
-        list.innerHTML = "<div style='padding: 20px; color: red;'>Connection Error. Check backend status.</div>";
+        list.innerHTML = `
+            <div style='padding: 40px; text-align: center;'>
+                <div style='color: #ef4444; font-size: 18px; margin-bottom: 10px;'>Connection Error</div>
+                <div style='color: var(--text-muted);'>Unable to reach backend. Check if server is running.</div>
+            </div>
+        `;
     } finally {
         list.style.opacity = "1";
     }
 }
 
-/**
- * Updates the scrollable list with new results
- */
+// ============= FRONTEND SORTING =============
+function sortResults() {
+    const sortBy = document.getElementById('frontendSortBy').value;
+    const sortOrder = document.getElementById('frontendSortOrder').value;
+    const reverse = sortOrder === 'desc';
+
+    currentResults.sort((a, b) => {
+        let aVal, bVal;
+        
+        switch(sortBy) {
+            case 'net_profit':
+                aVal = a.net_profit;
+                bVal = b.net_profit;
+                break;
+            case 'price':
+                aVal = a.price;
+                bVal = b.price;
+                break;
+            case 'roi':
+            default:
+                aVal = a.roi;
+                bVal = b.roi;
+                break;
+        }
+        
+        return reverse ? bVal - aVal : aVal - bVal;
+    });
+
+    updateUI(currentResults);
+}
+
+// ============= UI RENDERING =============
 function updateUI(items) {
     const list = document.getElementById('inventoryList');
+    
     if (items.length === 0) {
-        list.innerHTML = "<div style='padding: 20px; text-align: center;'>No matches found.</div>";
+        list.innerHTML = `
+            <div class="no-results">
+                <div>No matches found. Try adjusting your filters.</div>
+            </div>
+        `;
         return;
     }
 
     list.innerHTML = items.map(car => {
-        const color = calculateHeatmap(car.roi);
+        const heatmapColor = calculateHeatmap(car.roi, 45, 70);
+        const heatmapColorBorder = calculateHeatmap(car.roi, 35, 60);
+
         return `
-            <div class="car-row" onclick="viewDetails(${car.id})">
-                <div>
-                    <div class="car-name">${car.brand} ${car.model}</div>
-                    <div class="car-sub">ID: #${car.id.toString().padStart(4, '0')}</div>
+            <div class="car-card" data-car-id="${car.id}">
+                <div class="car-image">
+                    Image Placeholder
                 </div>
-                <div style="font-size: 14px; color: #64748b;">Year: ${car.year}</div>
-                <div style="font-weight: 700; color: var(--text-main);">$${car.price.toLocaleString()}</div>
-                
-                <!-- The ROI Heatmap Pill Element -->
-                <div class="roi-pill" style="background-color: ${color}; color: white; border-color: ${color};">
-                    ${car.roi}% ROI
+                <div class="car-info">
+                    <div class="car-header-row">
+                        <h3 class="car-model">${car.brand} ${car.model}</h3>
+                        <div class="car-year-pill">${car.year}</div>
+                    </div>
+                    
+                    <div class="separator"></div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-label">Mileage</span>
+                            <span class="stat-value">${car.mileage ? car.mileage.toLocaleString() : 'N/A'} mi</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Condition</span>
+                            <span class="stat-value">${car.condition ?? 'Undefined'}</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Purchase Price</span>
+                            <span class="stat-value">$${car.price.toLocaleString()}</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Heatmap ROI</span>
+                            <div class="roi-pill" style="background-color: ${heatmapColor}; border-color: ${heatmapColorBorder};">
+                                ${car.roi}%
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Net Profit</span>
+                            <span class="stat-value" style="color: ${car.net_profit >= 0 ? 'var(--accent-green)' : '#ef4444'};">
+                                ${car.net_profit >= 0 ? '+' : ''}$${car.net_profit.toLocaleString()}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
+
+    // Add click listeners to cards
+    document.querySelectorAll('.car-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const carId = parseInt(this.dataset.carId);
+            const car = items.find(c => c.id === carId);
+            if (car) showCarDetails(car);
+        });
+    });
 }
 
-/**
- * Modal interactions
- */
-function viewDetails(id) {
-    const car = carData.find(c => c.id === id);
-    if (!car) return;
+// ============= MODAL MANAGEMENT =============
+function showCarDetails(car) {
+    const modal = document.getElementById('itemModal');
+    const header = document.getElementById('modalHeader');
+    const content = document.getElementById('modalContent');
 
-    document.getElementById('modalHeader').innerText = `${car.brand} ${car.model}`;
-    document.getElementById('modalContent').innerHTML = `
-        <p><strong>Year:</strong> ${car.year}</p>
-        <p><strong>Purchase Price:</strong> $${car.price.toLocaleString()}</p>
-        <p><strong>Repair Estimate:</strong> $${car.repair_cost.toLocaleString()}</p>
-        <p><strong>Resale Value:</strong> $${car.resale_value.toLocaleString()}</p>
-        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 15px 0;">
-        <div style="background: #f8fafc; padding: 15px; border-radius: 10px;">
-            <h3 style="margin: 0; color: #059669;">Net Profit: $${car.net_profit.toLocaleString()}</h3>
-            <p style="margin: 5px 0 0 0; font-size: 14px; color: #64748b;">ROI calculation: ${(car.roi).toFixed(1)}%</p>
+    header.textContent = `${car.brand} ${car.model} (${car.year})`;
+    
+    content.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">PURCHASE PRICE</div>
+                    <div style="font-size: 20px; font-weight: 700;">$${car.price.toLocaleString()}</div>
+                </div>
+                <div>
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">RESALE VALUE</div>
+                    <div style="font-size: 20px; font-weight: 700;">$${car.resale_value.toLocaleString()}</div>
+                </div>
+                <div>
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">REPAIR COST</div>
+                    <div style="font-size: 20px; font-weight: 700;">$${car.repair_cost.toLocaleString()}</div>
+                </div>
+                <div>
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">MILEAGE</div>
+                    <div style="font-size: 20px; font-weight: 700;">${car.mileage ? car.mileage.toLocaleString() : 'N/A'} mi</div>
+                </div>
+            </div>
+            <div style="height: 1px; background: var(--separator);"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div style="background: var(--bg-page); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">NET PROFIT</div>
+                    <div style="font-size: 24px; font-weight: 700; color: ${car.net_profit >= 0 ? 'var(--accent-green)' : '#ef4444'};">
+                        ${car.net_profit >= 0 ? '+' : ''}$${car.net_profit.toLocaleString()}
+                    </div>
+                </div>
+                <div style="background: var(--bg-page); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">ROI</div>
+                    <div style="font-size: 24px; font-weight: 700; color: ${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">
+                        ${car.roi}%
+                    </div>
+                </div>
+            </div>
         </div>
     `;
-    document.getElementById('itemModal').style.display = 'flex';
+
+    modal.classList.add('active');
 }
 
 function hideModal() {
-    document.getElementById('itemModal').style.display = 'none';
+    document.getElementById('itemModal').classList.remove('active');
 }
 
-/**
- * Handle "Enter" key on the search bar
- */
-document.getElementById('brandSearch').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') executeSearch();
-});
+// ============= EVENT LISTENERS =============
+function initEventListeners() {
+    // Theme toggle
+    document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+    
+    // Search button
+    document.getElementById('searchBtn').addEventListener('click', executeSearch);
+    
+    // Frontend sort controls
+    document.getElementById('frontendSortBy').addEventListener('change', sortResults);
+    document.getElementById('frontendSortOrder').addEventListener('change', sortResults);
+    
+    // Close modal
+    document.getElementById('closeModalBtn').addEventListener('click', hideModal);
+    
+    // Close modal on outside click
+    document.getElementById('itemModal').addEventListener('click', function(e) {
+        if (e.target === this) hideModal();
+    });
+    
+    // Enter key on search inputs
+    ['makeSearch', 'modelSearch', 'maxPrice'].forEach(id => {
+        document.getElementById(id).addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') executeSearch();
+        });
+    });
+}
 
-// Initial load
-executeSearch();
+// ============= INITIALIZATION =============
+document.addEventListener('DOMContentLoaded', function() {
+    initTheme();
+    initEventListeners();
+    executeSearch(); // Load initial data
+});

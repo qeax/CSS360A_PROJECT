@@ -1,44 +1,65 @@
 version: '3.8'
 
 services:
-  backend:
-    build: ./backend
-    container_name: css360_backend
-    restart: unless-stopped
-    networks:
-      - proxy_network
-    labels:
-      - "traefik.enable=true"
-      # Router for backend: catching everything from the path /api/
-      - "traefik.http.routers.css360-backend.rule=Host(`css360.qeax.cloud`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.css360-backend.entrypoints=websecure"
-      - "traefik.http.routers.css360-backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.css360-backend.loadbalancer.server.port=8000"
-      - "traefik.http.middlewares.css360-strip.stripprefix.prefixes=/api"
-      - "traefik.http.routers.css360-backend.middlewares=css360-strip"
-      # priority higher than frontend, so Traefik can initially find API
-      - "traefik.http.routers.css360-backend.priority=2"
+    backend:
+        build: ./backend
+        container_name: css360_backend
+        restart: unless-stopped
+        env_file:
+            - ./.env
+        networks:
+            - proxy_network
+        labels:
+            - "traefik.enable=true"
+            # Router for backend: catching everything from the path /api/
+            - "traefik.http.routers.css360-backend.rule=Host(`css360.qeax.cloud`) && PathPrefix(`/api`)"
+            - "traefik.http.routers.css360-backend.entrypoints=websecure"
+            - "traefik.http.routers.css360-backend.tls.certresolver=letsencrypt"
+            - "traefik.http.services.css360-backend.loadbalancer.server.port=8000"
+            - "traefik.http.middlewares.css360-strip.stripprefix.prefixes=/api"
+            - "traefik.http.routers.css360-backend.middlewares=css360-strip"
+            # priority higher than frontend, so Traefik can initially find API
+            - "traefik.http.routers.css360-backend.priority=2"
 
-  frontend:
-    image: nginx:alpine
-    container_name: css360_frontend
-    restart: unless-stopped
-    networks:
-      - proxy_network
-    volumes:
-      - ./frontend:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    labels:
-      - "traefik.enable=true"
-      # Router for frontend: everything else
-      - "traefik.http.routers.css360-frontend.rule=Host(`css360.qeax.cloud`)"
-      - "traefik.http.routers.css360-frontend.entrypoints=websecure"
-      - "traefik.http.routers.css360-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.css360-frontend.loadbalancer.server.port=80"
-      # Priority lower
-      - "traefik.http.routers.css360-frontend.priority=1"
+    frontend:
+        image: nginx:alpine
+        container_name: css360_frontend
+        restart: unless-stopped
+        networks:
+            - proxy_network
+        volumes:
+            - ./frontend:/usr/share/nginx/html:ro
+            - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+        labels:
+            - "traefik.enable=true"
+            # Router for frontend: everything else
+            - "traefik.http.routers.css360-frontend.rule=Host(`css360.qeax.cloud`)"
+            - "traefik.http.routers.css360-frontend.entrypoints=websecure"
+            - "traefik.http.routers.css360-frontend.tls.certresolver=letsencrypt"
+            - "traefik.http.services.css360-frontend.loadbalancer.server.port=80"
+            # Priority lower
+            - "traefik.http.routers.css360-frontend.priority=1"
+      
+    db:
+        image: mariadb:10.11
+        container_name: css360_db
+        restart: unless-stopped
+        env_file:
+            - ./.env
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: ${DB_NAME}
+            MYSQL_USER: ${DB_USER}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+        volumes:
+            - mariadb_data:/var/lib/mysql
+        networks:
+            - proxy_network
+
+volumes:
+    mariadb_data:
     
 
 networks:
-  proxy_network:
-    external: true
+    proxy_network:
+        external: true

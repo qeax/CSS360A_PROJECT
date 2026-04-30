@@ -1,7 +1,57 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
+from sqlalchemy import create_engine, Column, Integer, String, Float
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+import os
 
+# Database configuration
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+
+
+def build_database_url() -> str:
+    explicit_url = os.getenv("DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT", "3306")
+    db_name = os.getenv("DB_NAME")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+
+    has_discrete_db_config = all([db_host, db_name, db_user, db_password])
+    if has_discrete_db_config:
+        return f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+
+    if APP_ENV in ("development", "dev", "local"):
+        # Local-safe fallback for development only.
+        return "sqlite:///./cars_dev.db"
+
+    raise RuntimeError("Missing database configuration. Provide DATABASE_URL or DB_* variables.")
+
+
+DATABASE_URL = build_database_url()
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Car model for database
+class Car(Base):
+    __tablename__ = "cars"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    brand = Column(String(100))
+    model = Column(String(100))
+    year = Column(Integer)
+    price = Column(Float)
+    repair_cost = Column(Float, default=0)
+    resale_value = Column(Float)
+    mileage = Column(Integer, nullable=True)
+    condition = Column(String(50), nullable=True)
+    
 app = FastAPI(title="CSS360 Car Flip Analyzer")
 
 # Configure CORS for cross-origin requests
@@ -59,6 +109,49 @@ MOCK_CARS = [
     {"id": 30, "brand": "Nissan", "model": "Maxima", "year": 2020, "price": 16500, "repair_cost": 400, "resale_value": 18500}
 ]
 
+for car in MOCK_CARS:
+    car.setdefault("condition", None)
+
+# Database initialization
+def init_db():
+    """Create tables and populate with mock data if empty"""
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        # Check if database is empty
+        if db.query(Car).count() == 0:
+            # Populate with mock data
+            for car_data in MOCK_CARS:
+                car_data.setdefault("condition", None)
+                car = Car(**car_data)
+                db.add(car)
+            db.commit()
+            print("Database initialized with mock data")
+    finally:
+        db.close()
+
+# Dependency to get database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Initialize database on startup
+try:
+    init_db()
+    USE_DATABASE = True
+    print("Connected to database")
+except Exception as e:
+    USE_DATABASE = False
+    print(f"Database connection failed: {e}")
+    if APP_ENV in ("development", "dev", "local"):
+        print("Using in-memory mock data")
+    else:
+        print("Running in degraded mode without database")
+
+
 @app.get("/cars")
 async def get_cars(
     make: Optional[str] = Query(None),
@@ -68,7 +161,9 @@ async def get_cars(
     condition: Optional[str] = Query(None),
     max_price: Optional[float] = Query(None),
     min_profit: Optional[float] = Query(None),
-    min_roi: Optional[float] = Query(None)
+    min_roi: Optional[float] = Query(None),
+    sort_by: Optional[str] = Query(None),  # roi, net_profit, price
+    sort_order: Optional[str] = Query("desc")  # asc, desc
 ):
     results = []
     for car in MOCK_CARS:
@@ -77,7 +172,11 @@ async def get_cars(
         if model and model.lower() not in car["model"].lower(): continue
         if min_year and car["year"] < min_year: continue
         if max_year and car["year"] > max_year: continue
-        if condition and condition.lower() not in car["condition"].lower(): continue
+        condition_value = car.get("condition")
+        if condition and (
+            not condition_value or condition.lower() not in condition_value.lower()
+        ):
+            continue
         if max_price and car["price"] > max_price: continue
             
         # --- 2. Calculate Profit/ROI ---
@@ -87,11 +186,29 @@ async def get_cars(
         if min_profit and analysis["net_profit"] < min_profit: continue
         if min_roi and analysis["roi"] < min_roi: continue
             
-        results.append({**car, **analysis})
+        car_data = {**car, **analysis}
+        if "mileage" not in car_data:
+            car_data["mileage"] = 75000 + (car["id"] * 1500) 
+        if "condition" not in car_data:
+            car_data["condition"] = None
+            
+        results.append(car_data)
     
-    # Sort by ROI descending to show best deals first
-    return sorted(results, key=lambda x: x["roi"], reverse=True)
+    if sort_by:
+        reverse_sort = True if sort_order == "desc" else False
+        if sort_by == "net_profit":
+            results.sort(key=lambda x: x["net_profit"], reverse=reverse_sort)
+        elif sort_by == "price":
+            results.sort(key=lambda x: x["price"], reverse=reverse_sort)
+        elif sort_by == "roi":
+            results.sort(key=lambda x: x["roi"], reverse=reverse_sort)
+
+    return results
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "CSS360 Backend"}
+    return {
+        "status": "ok",
+        "service": "CSS360 Backend",
+        "database_connected": USE_DATABASE
+    }
