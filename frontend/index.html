@@ -83,10 +83,10 @@
 
     <script>
 
-        function calculateHeatmap(roi, brightness) {
+        function calculateHeatmap(roi, brightness, saturation) {
             const score = Math.min(Math.max(roi, 0), 30);
             const hue = (score / 30) * 120; // 0 = Red, 120 = Green
-            return `hsl(${hue}, 55%, ${brightness}%)`;
+            return `hsl(${hue}, ${saturation}%, ${brightness}%)`;
         }
         async function executeSearch() {
             const params = new URLSearchParams();
@@ -114,8 +114,8 @@
                 }
 
                 list.innerHTML = cars.map(car => {
-                const heatmapColor = calculateHeatmap(car.roi, 50);
-                const heatmapColorBg = calculateHeatmap(car.roi, 20);
+                const heatmapColor = calculateHeatmap(car.roi, 50, 55);
+                const heatmapColorBg = calculateHeatmap(car.roi, 80, 40);
 
                 return `
                     <div class="car-row" onclick="showDetails('${car.brand} ${car.model}', ${car.price}, ${car.resale_value}, ${car.repair_cost}, ${car.net_profit}, ${car.roi}, '${car.condition}')">
