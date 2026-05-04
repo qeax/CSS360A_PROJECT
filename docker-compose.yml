@@ -5,6 +5,8 @@ services:
         restart: unless-stopped
         env_file:
             - ./.env
+        environment:
+            SEED_ON_START: ${SEED_ON_START:-false}
         networks:
             - proxy_network
         labels:

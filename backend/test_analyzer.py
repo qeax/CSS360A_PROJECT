@@ -36,7 +36,7 @@ class TestProfitCalculation:
     def test_calculates_positive_profit(self):
         """Should calculate positive profit when resale > purchase"""
         # TODO: Implement analyzer
-        # from core.analyzer import calculate_flip_score
+        # from app.services.flip import calculate_flip_score
         # listing = {
         #     "purchase_price": 10000,
         #     "estimated_resale": 12500,

@@ -115,15 +115,19 @@ function updateUI(items) {
         const heatmapColor = calculateHeatmap(car.roi, 45, 70);
         const heatmapColorBorder = calculateHeatmap(car.roi, 35, 60);
 
+        const imageBlock = car.image_url
+            ? `<img src="${car.image_url}" alt="">`
+            : 'Image Placeholder';
+
         return `
             <div class="car-card" data-car-id="${car.id}">
                 <div class="car-image">
-                    Image Placeholder
+                    ${imageBlock}
                 </div>
                 <div class="car-info">
                     <div class="car-header-row">
-                        <h3 class="car-model">${car.brand} ${car.model}</h3>
                         <div class="car-year-pill">${car.year}</div>
+                        <h3 class="car-model">${car.brand} ${car.model}</h3>
                     </div>
                     
                     <div class="separator"></div>
@@ -142,7 +146,7 @@ function updateUI(items) {
                             <span class="stat-value">$${car.price.toLocaleString()}</span>
                         </div>
                         <div class="stat-box">
-                            <span class="stat-label">Heatmap ROI</span>
+                            <span class="stat-label">ROI</span>
                             <div class="roi-pill" style="background-color: ${heatmapColor}; border-color: ${heatmapColorBorder};">
                                 ${car.roi}%
                             </div>

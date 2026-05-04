@@ -14,18 +14,19 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         env:
-          APP_ENV: production
-          DB_HOST: db
-          DB_PORT: 3306
+          APP_ENV: ${{ secrets.APP_ENV }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          SEED_ON_START: ${{ secrets.SEED_ON_START }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: APP_ENV,DB_HOST,DB_PORT,DB_NAME,DB_USER,DB_PASSWORD,MYSQL_ROOT_PASSWORD
+          envs: APP_ENV,DB_HOST,DB_PORT,DB_NAME,DB_USER,DB_PASSWORD,MYSQL_ROOT_PASSWORD,SEED_ON_START
           script: |
             set -e
             
@@ -39,6 +40,7 @@ jobs:
             DB_USER=${DB_USER}
             DB_PASSWORD=${DB_PASSWORD}
             MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            SEED_ON_START=${SEED_ON_START}
             EOF
             
             docker network create proxy_network || true
