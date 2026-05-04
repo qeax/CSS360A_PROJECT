@@ -13,5 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Expose both /cars and /api/cars (and health) so Traefik works with or without StripPrefix on `/api`.
 app.include_router(cars.router)
+app.include_router(cars.router, prefix="/api")
 app.include_router(health.router)
+app.include_router(health.router, prefix="/api")

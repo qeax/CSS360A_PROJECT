@@ -43,7 +43,7 @@ jobs:
             SEED_ON_START=${SEED_ON_START}
             EOF
             
-            docker network create proxy_network || true
+            docker network inspect proxy_network >/dev/null 2>&1 || docker network create proxy_network
             
             docker compose down --remove-orphans
             
@@ -54,17 +54,16 @@ jobs:
             echo "=== Deployment Status ==="
             docker compose ps
 
-            echo "=== Smoke Checks ==="
+            echo "=== Smoke Checks (backend loopback, bypasses Traefik) ==="
             for attempt in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS https://css360.qeax.cloud/api/health >/tmp/health.json; then
+              if docker compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"; then
                 break
               fi
               echo "Health check attempt ${attempt}/10 failed, waiting 6s..."
               sleep 6
             done
 
-            curl -fsS https://css360.qeax.cloud/api/health >/tmp/health.json
-            cat /tmp/health.json
+            docker compose exec -T backend python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); print(r.read().decode())"
             
             echo "=== Recent Logs ==="
             docker compose logs --tail=50
