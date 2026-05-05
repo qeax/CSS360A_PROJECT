@@ -86,3 +86,8 @@ python3 -m pytest backend/test_analyzer.py
 ```
 
 The suite is still mostly red-phase placeholders; profit logic lives in `app.services.flip`.
+
+## Development Standards (v1.0)
+- **Branching:** Do not push directly to `main`. Create a feature branch first.
+- **Code Reviews:** Every Pull Request (PR) requires at least one approval from a teammate.
+- **Testing:** Ensure all unit tests pass before merging.
