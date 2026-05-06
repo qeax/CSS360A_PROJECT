@@ -9,6 +9,7 @@ venv/
 .vscode/
 .idea/
 *.swp
+.cursor
 
 # Environment
 .env
