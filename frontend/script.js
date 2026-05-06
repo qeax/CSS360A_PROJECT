@@ -2,6 +2,10 @@
  * CSS360 Car Flip Dashboard - Frontend Logic
  */
 
+/** Stub session flag — must match login.js until real auth exists. */
+const AUTH_STORAGE_KEY = 'css360_authenticated';
+const AUTH_STORAGE_VALUE = '1';
+
 // Global state
 let carData = [];
 let currentResults = [];
@@ -228,6 +232,11 @@ function hideModal() {
 
 // ============= EVENT LISTENERS =============
 function initEventListeners() {
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.location.href = '/';
+    });
+
     // Theme toggle
     document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
     
@@ -256,6 +265,11 @@ function initEventListeners() {
 
 // ============= INITIALIZATION =============
 document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem(AUTH_STORAGE_KEY) !== AUTH_STORAGE_VALUE) {
+        window.location.replace('login.html');
+        return;
+    }
+
     initTheme();
     initEventListeners();
     executeSearch(); // Load initial data
