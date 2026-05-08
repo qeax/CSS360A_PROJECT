@@ -3,25 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — Car Flip Marketplace</title>
+    <title>Sign in — Car Flip Marketplace</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="login-page-body">
     <div class="login-shell">
         <div class="login-card">
-            <h1 class="login-title">Login</h1>
-            <p class="login-subtitle">Enter any credentials to access the dashboard.</p>
-            <form id="loginForm" class="login-form">
-                <div class="input-group">
-                    <label for="loginUsername">Username</label>
-                    <input type="text" id="loginUsername" name="username" autocomplete="username" placeholder="Username">
-                </div>
-                <div class="input-group">
-                    <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="Password">
-                </div>
-                <button type="submit" class="btn-search login-submit">Sign in</button>
-            </form>
+            <p class="login-brand">CSS360 · Car Flip Marketplace</p>
+            <h1 class="login-title">University sign-in</h1>
+            <p class="login-subtitle">
+                Access is limited to University of Washington Bothell students, faculty, and authorized staff.
+                Use your university Microsoft account to continue.
+            </p>
+            <p id="loginError" class="login-error" role="alert" hidden></p>
+            <div class="login-actions">
+                <a class="btn-ms-signin" href="/api/auth/login">
+                    <svg class="btn-ms-signin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" aria-hidden="true">
+                        <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                        <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                        <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                    </svg>
+                    <span>Sign in with Microsoft</span>
+                </a>
+            </div>
+            <p class="login-footnote">
+                Having trouble? Contact your course staff or university IT for account issues.
+            </p>
         </div>
     </div>
     <script src="login.js"></script>

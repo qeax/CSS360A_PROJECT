@@ -2,10 +2,6 @@
  * CSS360 Car Flip Dashboard - Frontend Logic
  */
 
-/** Stub session flag — must match login.js until real auth exists. */
-const AUTH_STORAGE_KEY = 'css360_authenticated';
-const AUTH_STORAGE_VALUE = '1';
-
 // Global state
 let carData = [];
 let currentResults = [];
@@ -52,7 +48,11 @@ async function executeSearch() {
     if (maxPrice) query.searchParams.append('max_price', maxPrice);
 
     try {
-        const response = await fetch(query);
+        const response = await fetch(query, { credentials: 'include' });
+        if (response.status === 401) {
+            window.location.replace('login.html');
+            return;
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         carData = await response.json();
@@ -233,8 +233,7 @@ function hideModal() {
 // ============= EVENT LISTENERS =============
 function initEventListeners() {
     document.getElementById('logoutBtn').addEventListener('click', () => {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        window.location.href = '/';
+        window.location.href = '/api/auth/logout';
     });
 
     // Theme toggle
@@ -264,13 +263,20 @@ function initEventListeners() {
 }
 
 // ============= INITIALIZATION =============
-document.addEventListener('DOMContentLoaded', function() {
-    if (localStorage.getItem(AUTH_STORAGE_KEY) !== AUTH_STORAGE_VALUE) {
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.status === 401) {
+            window.location.replace('login.html');
+            return;
+        }
+        if (!res.ok) throw new Error('session_check_failed');
+    } catch {
         window.location.replace('login.html');
         return;
     }
 
     initTheme();
     initEventListeners();
-    executeSearch(); // Load initial data
+    executeSearch();
 });

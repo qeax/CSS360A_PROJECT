@@ -4,3 +4,5 @@ pymysql
 sqlalchemy>=2.0
 cryptography
 alembic
+httpx
+PyJWT
