@@ -335,6 +335,7 @@ body.login-page-body {
     margin: 0 0 8px;
     font-size: 1.5rem;
     font-weight: 700;
+    text-align: center;
 }
 
 .login-subtitle {
@@ -359,9 +360,10 @@ body.login-page-body {
     margin: 0 0 12px;
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
 .login-actions {
@@ -431,6 +433,16 @@ body.light-theme .login-error {
     font-size: 12px;
     line-height: 1.5;
     color: var(--text-muted);
+}
+
+.login-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.login-link:hover {
+    color: var(--text-main);
 }
 
 .header-actions {
