@@ -6,3 +6,4 @@ cryptography
 alembic
 httpx
 PyJWT
+itsdangerous
