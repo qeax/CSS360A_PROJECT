@@ -6,6 +6,36 @@
 let carData = [];
 let currentResults = [];
 
+const VIEW_STORAGE_KEY = 'inventory_view';
+
+function initViewMode() {
+    const el = document.getElementById('inventoryList');
+    const mode = localStorage.getItem(VIEW_STORAGE_KEY) || 'list';
+    el.classList.add('inventory-list');
+    el.classList.toggle('inventory-list--grid', mode === 'grid');
+    const listBtn = document.getElementById('viewListBtn');
+    const gridBtn = document.getElementById('viewGridBtn');
+    if (listBtn && gridBtn) {
+        listBtn.setAttribute('aria-pressed', mode === 'list' ? 'true' : 'false');
+        gridBtn.setAttribute('aria-pressed', mode === 'grid' ? 'true' : 'false');
+    }
+}
+
+function setViewMode(mode) {
+    const el = document.getElementById('inventoryList');
+    localStorage.setItem(VIEW_STORAGE_KEY, mode);
+    el.classList.toggle('inventory-list--grid', mode === 'grid');
+    document.getElementById('viewListBtn').setAttribute('aria-pressed', mode === 'list' ? 'true' : 'false');
+    document.getElementById('viewGridBtn').setAttribute('aria-pressed', mode === 'grid' ? 'true' : 'false');
+}
+
+function resetFilters() {
+    document.getElementById('makeSearch').value = '';
+    document.getElementById('modelSearch').value = '';
+    document.getElementById('maxPrice').value = '';
+    executeSearch();
+}
+
 // ============= THEME MANAGEMENT =============
 function toggleTheme() {
     document.body.classList.toggle('light-theme');
@@ -241,6 +271,11 @@ function initEventListeners() {
     
     // Search button
     document.getElementById('searchBtn').addEventListener('click', executeSearch);
+
+    document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+
+    document.getElementById('viewListBtn').addEventListener('click', () => setViewMode('list'));
+    document.getElementById('viewGridBtn').addEventListener('click', () => setViewMode('grid'));
     
     // Frontend sort controls
     document.getElementById('frontendSortBy').addEventListener('change', sortResults);
@@ -277,6 +312,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     initTheme();
+    initViewMode();
     initEventListeners();
     executeSearch();
 });
