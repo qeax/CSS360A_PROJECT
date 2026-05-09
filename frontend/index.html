@@ -9,38 +9,59 @@
 <body>
     <div class="marketplace-container">
         <div class="header-controls">
-            <h2 style="margin:0;">Car Flip Dashboard</h2>
+            <h2 class="page-title">Car Flip Dashboard</h2>
             <div class="header-actions">
                 <button type="button" class="theme-toggle" id="logoutBtn">Log out</button>
                 <button type="button" class="theme-toggle" id="themeToggleBtn">Toggle Theme</button>
             </div>
         </div>
 
-        <header class="search-header">
-            <div class="search-grid">
-                <div class="input-group"><label>Make</label><input type="text" id="makeSearch" placeholder="Toyota, Honda..."></div>
-                <div class="input-group"><label>Model</label><input type="text" id="modelSearch" placeholder="Camry, Civic..."></div>
-                <div class="input-group"><label>Max Price</label><input type="number" id="maxPrice" placeholder="20000"></div>
+        <div class="inventory-toolbar">
+            <div class="toolbar-row toolbar-row--filters">
+                <div class="search-header">
+                    <div class="search-grid">
+                        <div class="input-group"><label>Make</label><input type="text" id="makeSearch" placeholder="Toyota, Honda..."></div>
+                        <div class="input-group"><label>Model</label><input type="text" id="modelSearch" placeholder="Camry, Civic..."></div>
+                        <div class="input-group"><label>Max Price</label><input type="number" id="maxPrice" placeholder="20000"></div>
+                    </div>
+                    <div class="action-row action-row--filters">
+                        <button type="button" class="btn-search" id="searchBtn">Search Inventory</button>
+                        <button type="button" class="btn-reset" id="resetFiltersBtn">Reset filters</button>
+                    </div>
+                </div>
             </div>
-            <div class="action-row">
-                <button class="btn-search" id="searchBtn">Search Inventory</button>
+            <div class="toolbar-row toolbar-row--controls">
+                <div class="sort-controls">
+                    <span class="sort-controls-label" id="sortControlsLabel">Sort results</span>
+                    <select id="frontendSortBy" class="toolbar-select" aria-labelledby="sortControlsLabel">
+                        <option value="roi">ROI %</option>
+                        <option value="net_profit">Net Profit</option>
+                        <option value="price">Purchase Price</option>
+                    </select>
+                    <select id="frontendSortOrder" class="toolbar-select" aria-labelledby="sortControlsLabel">
+                        <option value="desc">Highest First</option>
+                        <option value="asc">Lowest First</option>
+                    </select>
+                    <div class="view-toggle" role="group" aria-label="Inventory layout">
+                        <button type="button" class="view-toggle-btn" id="viewListBtn" aria-label="List view" aria-pressed="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="view-toggle-btn" id="viewGridBtn" aria-label="Grid view" aria-pressed="false">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                                <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                                <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                                <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
-        </header>
-
-        <div class="sort-controls">
-            <label>Sort Results:</label>
-            <select id="frontendSortBy">
-                <option value="roi">ROI %</option>
-                <option value="net_profit">Net Profit</option>
-                <option value="price">Purchase Price</option>
-            </select>
-            <select id="frontendSortOrder">
-                <option value="desc">Highest First</option>
-                <option value="asc">Lowest First</option>
-            </select>
         </div>
 
-        <div id="inventoryList"></div>
+        <div id="inventoryList" class="inventory-list"></div>
     </div>
 
     <div id="itemModal" class="modal">
