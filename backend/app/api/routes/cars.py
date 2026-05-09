@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.deps.auth import get_current_user
 from app.db import get_db
+from app.models.user import User
 from app.repositories.cars import apply_filters, iter_cars
 
 router = APIRouter(tags=["cars"])
@@ -23,6 +25,7 @@ def get_cars(
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("desc"),
     db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     try:
         rows = iter_cars(db)

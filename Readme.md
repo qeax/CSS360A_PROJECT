@@ -9,7 +9,7 @@ Stack: FastAPI backend, static frontend (Nginx), MariaDB in Docker, Traefik TLS 
 - [backend/app/db.py](backend/app/db.py) — SQLAlchemy engine and sessions
 - [backend/app/models/car.py](backend/app/models/car.py) — `cars` table (includes fields reserved for future eBay sync)
 - [backend/app/repositories/cars.py](backend/app/repositories/cars.py) — DB queries and filter helpers
-- [backend/app/api/routes/](backend/app/api/routes/) — HTTP routes (`/cars`, `/health`)
+- [backend/app/api/routes/](backend/app/api/routes/) — HTTP routes (`/cars`, `/health`, `/auth/*` Microsoft Entra OAuth)
 - [backend/app/services/flip.py](backend/app/services/flip.py) — ROI / net profit
 - [backend/app/integrations/ebay/](backend/app/integrations/ebay/) — placeholder for eBay client
 - [backend/seeds/cars_seed.json](backend/seeds/cars_seed.json) — optional demo seed data (not loaded from Python code)
@@ -34,10 +34,26 @@ Configure these repository secrets for CD:
 | `DB_PORT` | e.g. `3306` |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD` | MariaDB and app DB user |
 | `SEED_ON_START` | `true` or `false` — run [backend/app/seed.py](backend/app/seed.py) on container start when the `cars` table is empty |
+| `AZURE_AD_TENANT_ID` | Microsoft Entra ID directory (tenant) ID |
+| `AZURE_AD_CLIENT_ID` | App registration application (client) ID |
+| `AZURE_AD_CLIENT_SECRET` | App registration client secret (backend only) |
+| `AZURE_AD_REDIRECT_URI` | Must match Entra Web redirect URI exactly (e.g. `https://<your-domain>/api/auth/callback`) |
+| `AUTH_SESSION_SECRET` | Random secret used to sign browser session cookies |
+| `ALLOWED_EMAIL_DOMAIN` | Optional; if set (e.g. `uw.edu`), only emails ending with `@` that domain may sign in |
+| `CORS_ORIGINS` | Optional comma-separated allowed browser origins; if unset in production, set it to your public app origin (for example `https://<your-domain>`) |
 
 Future variables (for example eBay API keys) follow the same rule: add a GitHub secret, pass it into the workflow `env` block, append a line to the `cat > .env <<EOF` script, and list the name in `envs` for `appleboy/ssh-action`.
 
 Local development: keep a private `.env` on your machine (ignored by git); do not commit credentials.
+
+### Public repository safety rules
+
+- Never commit real credentials, private keys, callback secrets, or production hostnames that are not already public.
+- Keep all secret values only in GitHub Actions Secrets and server runtime `.env`.
+- Use placeholders (`<your-domain>`, `<secret>`, `<tenant-id>`) in documentation examples.
+- Rotate `AZURE_AD_CLIENT_SECRET` and `AUTH_SESSION_SECRET` immediately if a leak is suspected.
+- Restrict `CORS_ORIGINS` to trusted app origins only (avoid wildcard origins in production).
+- Ensure `AZURE_AD_REDIRECT_URI` in GitHub Secrets exactly matches the Entra App Registration value.
 
 ## Migrations and seed
 
