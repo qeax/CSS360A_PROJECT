@@ -22,7 +22,9 @@ class Car(Base):
     listing_url = Column(String(1024), nullable=True)
     raw_listing_json = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
