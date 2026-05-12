@@ -94,16 +94,58 @@ alembic upgrade head
 
 Static files live under [frontend/](frontend/). Styles are in [frontend/styles.css](frontend/styles.css).
 
-## Unit tests (TDD scaffold)
+## CI, lint, tests, and security
+
+GitHub Actions [.github/workflows/ci.yml](.github/workflows/ci.yml) on every **push** and **pull request** to `main`:
+
+- **Ruff** — lint and format check  
+- **pip-audit** — known vulnerabilities in locked dependency names from `requirements.txt` + `requirements-dev.txt`  
+- **Bandit** — security-oriented static analysis on `app/`  
+- **pytest** — tests against **MariaDB 10.11**
+
+[Dependabot](.github/dependabot.yml) opens weekly PRs for **pip** (`backend/`), **GitHub Actions**, and the **backend Docker** image.
+
+Local (from `backend/`):
 
 ```bash
-python3 -m pip install pytest
-python3 -m pytest backend/test_analyzer.py
+cd backend
+python -m pip install -r requirements.txt -r requirements-dev.txt
+ruff check .
+ruff format --check .
+pip-audit -r requirements.txt -r requirements-dev.txt
+bandit -r app -ll
+pytest
 ```
 
-The suite is still mostly red-phase placeholders; profit logic lives in `app.services.flip`.
+Optional git hooks — uses [.pre-commit-config.yaml](.pre-commit-config.yaml) (Ruff with auto-fix, Ruff format, Bandit, pip-audit).
+
+### Setting up pre-commit (one-time per clone)
+
+From the **repository root** (not `backend/`):
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+```
+
+That installs a **git `pre-commit` hook**. On every `git commit`, hooks run on staged files; Ruff may **edit** files in place, then you **stage again** and commit if something changed:
+
+```bash
+git add -u
+git commit -m "your message"
+```
+
+First-time or “fix the whole tree” pass (optional):
+
+```bash
+pre-commit run --all-files
+```
+
+Then review diffs, `git add`, and commit.
+
+**Note:** Hooks run only on **your machine** after `pre-commit install`. They do not change what other contributors do unless everyone installs them. CI on GitHub remains the shared gate.
 
 ## Development Standards (v1.0)
 - **Branching:** Do not push directly to `main`. Create a feature branch first.
 - **Code Reviews:** Every Pull Request (PR) requires at least one approval from a teammate.
-- **Testing:** Ensure all unit tests pass before merging.
+- **Testing:** CI runs Ruff, pip-audit, Bandit, and pytest; keep them green before merging.

@@ -55,7 +55,9 @@ def _create_full_table() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_cars_brand"), "cars", ["brand"], unique=False)
-    op.create_index(op.f("ix_cars_external_listing_id"), "cars", ["external_listing_id"], unique=False)
+    op.create_index(
+        op.f("ix_cars_external_listing_id"), "cars", ["external_listing_id"], unique=False
+    )
     op.create_index(op.f("ix_cars_id"), "cars", ["id"], unique=False)
     op.create_index(op.f("ix_cars_model"), "cars", ["model"], unique=False)
     op.create_index(op.f("ix_cars_price"), "cars", ["price"], unique=False)
@@ -76,7 +78,9 @@ def _add_missing_columns(cols: set) -> None:
                 )
             )
         if "external_listing_id" not in cols:
-            batch_op.add_column(sa.Column("external_listing_id", sa.String(length=128), nullable=True))
+            batch_op.add_column(
+                sa.Column("external_listing_id", sa.String(length=128), nullable=True)
+            )
         if "listing_url" not in cols:
             batch_op.add_column(sa.Column("listing_url", sa.String(length=1024), nullable=True))
         if "raw_listing_json" not in cols:

@@ -5,8 +5,17 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import build_database_url
 from app.db import Base
-from app.models.car import Car  # noqa: F401
-from app.models.user import User  # noqa: F401
+from app.models import (  # noqa: F401
+    Car,
+    CarListingTerms,
+    CarLocation,
+    CarMedia,
+    ExternalSeller,
+    User,
+    UserAuditEvent,
+    VehicleAspectSnapshot,
+    VehicleHistoryReport,
+)
 
 config = context.config
 if config.config_file_name is not None:

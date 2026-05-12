@@ -11,7 +11,7 @@ def health():
     database_connected = False
     try:
         with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
+            db.execute(text("SELECT 1"))  # nosec B608
             database_connected = True
     except Exception:
         database_connected = False
