@@ -2,4 +2,4 @@
 ruff>=0.9,<1
 pytest>=9.0.3,<10
 pip-audit>=2.7,<3
-bandit[toml]>=1.8,<2
+bandit[toml]>=1.9.4,<2
