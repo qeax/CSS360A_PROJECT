@@ -166,9 +166,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_vehicle_history_reports_car_id"), table_name="vehicle_history_reports")
     op.drop_table("vehicle_history_reports")
 
-    op.drop_index(
-        op.f("ix_vehicle_aspect_snapshots_car_id"), table_name="vehicle_aspect_snapshots"
-    )
+    op.drop_index(op.f("ix_vehicle_aspect_snapshots_car_id"), table_name="vehicle_aspect_snapshots")
     op.drop_table("vehicle_aspect_snapshots")
 
     op.drop_index(op.f("ix_car_media_car_id"), table_name="car_media")

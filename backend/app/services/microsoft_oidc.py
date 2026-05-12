@@ -17,10 +17,7 @@ _jwk_clients: dict[str, PyJWKClient] = {}
 
 
 def _discovery_url(tenant_id: str) -> str:
-    return (
-        f"https://login.microsoftonline.com/{tenant_id}/v2.0/"
-        ".well-known/openid-configuration"
-    )
+    return f"https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration"
 
 
 def get_oidc_metadata(tenant_id: str) -> dict[str, Any]:

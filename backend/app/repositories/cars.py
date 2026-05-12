@@ -41,16 +41,12 @@ def apply_filters(
         if max_year and car.year > max_year:
             continue
         condition_value = car.condition
-        if condition and (
-            not condition_value or condition.lower() not in condition_value.lower()
-        ):
+        if condition and (not condition_value or condition.lower() not in condition_value.lower()):
             continue
         if max_price and car.price > max_price:
             continue
 
-        analysis = calculate_flip_score(
-            car.price, car.resale_value, car.repair_cost or 0
-        )
+        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
         if min_profit and analysis["net_profit"] < min_profit:
             continue
         if min_roi and analysis["roi"] < min_roi:
