@@ -26,7 +26,10 @@ def _discovery_url(tenant_id: str) -> str:
 def get_oidc_metadata(tenant_id: str) -> dict[str, Any]:
     global _oidc_cache, _oidc_cache_ts
     now = time.time()
-    if _oidc_cache.get("tenant") == tenant_id and now - _oidc_cache_ts < _OIDC_CACHE_TTL_SEC:
+    if (
+        _oidc_cache.get("tenant") == tenant_id
+        and now - _oidc_cache_ts < _OIDC_CACHE_TTL_SEC
+    ):
         return _oidc_cache["data"]
 
     url = _discovery_url(tenant_id)

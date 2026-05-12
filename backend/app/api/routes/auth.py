@@ -92,11 +92,15 @@ def auth_callback(
     redirect_uri = get_azure_ad_redirect_uri()
 
     if not all([tenant_id, client_id, client_secret, redirect_uri, code, state]):
-        return RedirectResponse(url=_login_redirect_url("invalid_request"), status_code=302)
+        return RedirectResponse(
+            url=_login_redirect_url("invalid_request"), status_code=302
+        )
 
     expected = request.session.pop("oauth_state", None)
     if not expected or state != expected:
-        return RedirectResponse(url=_login_redirect_url("invalid_state"), status_code=302)
+        return RedirectResponse(
+            url=_login_redirect_url("invalid_state"), status_code=302
+        )
 
     try:
         tokens = exchange_code_for_tokens(
@@ -108,7 +112,9 @@ def auth_callback(
         )
         id_token = tokens.get("id_token")
         if not id_token:
-            return RedirectResponse(url=_login_redirect_url("no_id_token"), status_code=302)
+            return RedirectResponse(
+                url=_login_redirect_url("no_id_token"), status_code=302
+            )
 
         claims = decode_and_validate_id_token(
             tenant_id=tenant_id,
@@ -118,16 +124,22 @@ def auth_callback(
 
         token_tid = claims.get("tid")
         if token_tid and str(token_tid).lower() != str(tenant_id).lower():
-            return RedirectResponse(url=_login_redirect_url("wrong_tenant"), status_code=302)
+            return RedirectResponse(
+                url=_login_redirect_url("wrong_tenant"), status_code=302
+            )
 
         email = pick_email_claim(claims)
         sub = claims.get("sub")
         if not email or not sub:
-            return RedirectResponse(url=_login_redirect_url("missing_identity"), status_code=302)
+            return RedirectResponse(
+                url=_login_redirect_url("missing_identity"), status_code=302
+            )
 
         allowed_domain = get_allowed_email_domain()
         if not _email_domain_allowed(email, allowed_domain):
-            return RedirectResponse(url=_login_redirect_url("email_not_allowed"), status_code=302)
+            return RedirectResponse(
+                url=_login_redirect_url("email_not_allowed"), status_code=302
+            )
 
         user = upsert_user_by_oid(db, azure_oid=str(sub), email=email)
         request.session["user_id"] = user.id
@@ -135,7 +147,9 @@ def auth_callback(
 
         return RedirectResponse(url="/index.html", status_code=302)
     except (httpx.HTTPError, jwt.exceptions.PyJWTError, KeyError, ValueError):
-        return RedirectResponse(url=_login_redirect_url("sign_in_failed"), status_code=302)
+        return RedirectResponse(
+            url=_login_redirect_url("sign_in_failed"), status_code=302
+        )
 
 
 @router.get("/auth/logout")

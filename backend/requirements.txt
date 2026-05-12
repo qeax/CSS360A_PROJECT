@@ -7,3 +7,5 @@ alembic
 httpx
 PyJWT
 itsdangerous
+ruff==0.8.0
+bandit==1.7.10
