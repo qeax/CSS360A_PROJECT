@@ -28,9 +28,7 @@ DEMO_SOURCE = "demo"
 def run(dry_run: bool) -> int:
     db = SessionLocal()
     try:
-        n = db.scalar(
-            select(func.count()).select_from(Car).where(Car.source == DEMO_SOURCE)
-        ) or 0
+        n = db.scalar(select(func.count()).select_from(Car).where(Car.source == DEMO_SOURCE)) or 0
         if n == 0:
             print("No rows with source='demo' to remove.")
             return 0
