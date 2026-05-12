@@ -10,9 +10,7 @@ class User(Base):
     email = Column(String(320), nullable=False, unique=True, index=True)
     azure_oid = Column(String(255), nullable=False, unique=True, index=True)
 
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

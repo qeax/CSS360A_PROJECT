@@ -89,6 +89,4 @@ def build_database_url() -> str:
     if app_env in ("development", "dev", "local"):
         return "sqlite:///./cars_dev.db"
 
-    raise RuntimeError(
-        "Missing database configuration. Provide DATABASE_URL or DB_* variables."
-    )
+    raise RuntimeError("Missing database configuration. Provide DATABASE_URL or DB_* variables.")
