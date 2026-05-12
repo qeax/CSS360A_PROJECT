@@ -1,14 +1,22 @@
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.car import Car
 from app.services.flip import calculate_flip_score
 
 
 def iter_cars(db: Session):
-    return db.scalars(select(Car).order_by(Car.id)).all()
+    return db.scalars(
+        select(Car)
+        .options(
+            joinedload(Car.external_seller),
+            joinedload(Car.location),
+            joinedload(Car.listing_terms),
+        )
+        .order_by(Car.id)
+    ).all()
 
 
 def apply_filters(
@@ -52,6 +60,34 @@ def apply_filters(
         if mileage is None:
             mileage = 75000 + (car.id * 1500)
 
+        listing_terms = car.listing_terms
+        delivery = None
+        if listing_terms is not None:
+            delivery = {
+                "ship_to_home": listing_terms.ship_to_home,
+                "local_pickup": listing_terms.local_pickup,
+                "in_store_pickup": listing_terms.in_store_pickup,
+            }
+
+        loc = car.location
+        location_out = None
+        if loc is not None:
+            location_out = {
+                "country": loc.country,
+                "region": loc.region,
+                "city": loc.city,
+                "postal_code_masked": loc.postal_code_masked,
+            }
+
+        seller_username = None
+        es = car.external_seller
+        if es is not None:
+            seller_username = es.username
+
+        listing_ends_at = None
+        if car.listing_ends_at is not None:
+            listing_ends_at = car.listing_ends_at.isoformat()
+
         results.append(
             {
                 "id": car.id,
@@ -67,6 +103,13 @@ def apply_filters(
                 "source": car.source or "manual",
                 "external_listing_id": car.external_listing_id,
                 "listing_url": car.listing_url,
+                "listing_ends_at": listing_ends_at,
+                "bid_count": car.bid_count,
+                "listing_format": car.listing_format,
+                "description_summary": car.description_summary,
+                "seller_username": seller_username,
+                "location": location_out,
+                "delivery": delivery,
                 **analysis,
             }
         )
