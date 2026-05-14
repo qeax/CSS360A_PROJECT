@@ -92,7 +92,7 @@ alembic upgrade head
 
 ## Frontend
 
-Static files live under [frontend/](frontend/). Styles are in [frontend/styles.css](frontend/styles.css).
+Static files live under [frontend/](frontend/). Global styles load from [frontend/styles.css](frontend/styles.css), which pulls in partials under [frontend/css/](frontend/css/).
 
 ## CI, lint, tests, and security
 
