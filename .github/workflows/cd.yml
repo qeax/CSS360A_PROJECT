@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: CD
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
@@ -70,12 +70,13 @@ jobs:
 
             echo "=== Smoke Checks (backend loopback, bypasses Traefik) ==="
             ok=0
-            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+            max_attempts=10
+            for attempt in $(seq 1 $max_attempts); do
               if docker compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()" 2>/dev/null; then
                 ok=1
                 break
               fi
-              echo "Health check attempt ${attempt}/30 failed (backend may still be starting or crash-looping), waiting 5s..."
+              echo "Health check attempt ${attempt}/${max_attempts} failed (backend may still be starting or crash-looping), waiting 5s..."
               sleep 5
             done
             if [ "$ok" != "1" ]; then
