@@ -1,4 +1,11 @@
 /* Login page */
+.login-theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+}
+
 body.login-page-body {
     min-height: 100vh;
     display: flex;

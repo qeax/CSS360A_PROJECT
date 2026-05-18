@@ -1,25 +1,55 @@
 :root {
-    --bg-page: #24262b;
-    --ui-bg: #313338;
-    --accent-green: #059669;
-    --text-main: #eef1f7;
-    --text-muted: #94a3b8;
-    --border-color: #4b4b54;
-    --card-hover: #3f4147;
-    --separator: #4b4b54;
-    --toolbar-z: 40;
-    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
-    --select-chevron-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23eef1f7' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
+    --bg-page: #1a1b1f;
+    --ui-bg: #25262c;
+    --accent-green: #047857;
+    --text-main: #e8eaef;
+    --text-muted: #8b92a3;
+    --border-color: #3a3d45;
+    --card-hover: #32353d;
+    --separator: #3a3d45;
+    --toolbar-z: 50;
+    --topbar-z: 60;
+    --topbar-height: 56px;
+    --topbar-bg: #f1f3f7;
+    --topbar-fg: #1a1d24;
+    --topbar-border: #d8dde6;
+    --topbar-muted: #5c6578;
+    --topbar-input-bg: #ffffff;
+    --topbar-accent: var(--accent-green);
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92a3' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
+    --select-chevron-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e8eaef' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
 }
 
 body.light-theme {
-    --bg-page: #f1f5f9;
-    --ui-bg: #ffffff;
-    --text-main: #1e293b;
-    --text-muted: #64748b;
-    --border-color: #cbd5e1;
-    --card-hover: #f8fafc;
-    --separator: #e2e8f0;
-    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
-    --select-chevron-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231e293b' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
+    --bg-page: #d4d9e2;
+    --ui-bg: #c9ced8;
+    --text-main: #1a1d24;
+    --text-muted: #5c6578;
+    --border-color: #aeb6c4;
+    --card-hover: #bcc4d2;
+    --separator: #b4bcc9;
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235c6578' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
+    --select-chevron-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231a1d24' d='M2 5l4 4 4-4z'/%3E%3C/svg%3E");
+    --topbar-bg: #25262c;
+    --topbar-fg: #f1f3f7;
+    --topbar-border: #3a3d45;
+    --topbar-muted: #a8b0c0;
+    --topbar-input-bg: #1e1f24;
+    --topbar-accent: #10b981;
+}
+
+body.light-theme .toolbar-select {
+    background-color: var(--ui-bg);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }

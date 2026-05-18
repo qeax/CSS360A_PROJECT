@@ -11,12 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps.auth import ensure_dev_bypass_user
 from app.config import (
     get_allowed_email_domain,
     get_azure_ad_client_id,
     get_azure_ad_client_secret,
     get_azure_ad_redirect_uri,
     get_azure_ad_tenant_id,
+    is_dev_auth_bypass_enabled,
 )
 from app.db import get_db
 from app.repositories.users import get_user_by_id, upsert_user_by_oid
@@ -45,7 +47,13 @@ def _email_domain_allowed(email: str, domain: str | None) -> bool:
 
 
 @router.get("/auth/login")
-def login(request: Request) -> RedirectResponse:
+def login(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+    if is_dev_auth_bypass_enabled():
+        user = ensure_dev_bypass_user(db)
+        request.session["user_id"] = user.id
+        request.session["email"] = user.email
+        return RedirectResponse(url="/index.html", status_code=302)
+
     tenant_id = get_azure_ad_tenant_id()
     client_id = get_azure_ad_client_id()
     redirect_uri = get_azure_ad_redirect_uri()
@@ -146,6 +154,17 @@ def logout(request: Request) -> RedirectResponse:
 
 @router.get("/auth/me")
 def auth_me(request: Request, db: Session = Depends(get_db)):
+    if is_dev_auth_bypass_enabled():
+        user = ensure_dev_bypass_user(db)
+        request.session["user_id"] = user.id
+        request.session["email"] = user.email
+        return {
+            "authenticated": True,
+            "email": user.email,
+            "user_id": user.id,
+            "dev_bypass": True,
+        }
+
     uid = request.session.get("user_id")
     if uid is None:
         raise HTTPException(status_code=401, detail="not_authenticated")

@@ -16,6 +16,7 @@ class Car(Base):
     resale_value = Column(Float, nullable=False)
     mileage = Column(Integer, nullable=True)
     condition = Column(String(50), nullable=True)
+    vehicle_title = Column(String(128), nullable=True)
 
     image_url = Column(String(512), nullable=True)
     source = Column(String(50), nullable=False, server_default=text("'manual'"))

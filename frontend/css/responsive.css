@@ -1,18 +1,3 @@
-@media (max-width: 920px) {
-    .stats-grid {
-        grid-template-columns: repeat(2, minmax(110px, 1fr));
-    }
-
-    .car-card {
-        flex-direction: column;
-    }
-
-    .car-image {
-        width: 100%;
-        height: 180px;
-    }
-}
-
 @media (max-width: 600px) {
     .inventory-list--grid {
         grid-template-columns: 1fr;
@@ -22,41 +7,18 @@
         margin-left: 0;
     }
 
-    .sort-controls {
+    .inventory-toolbar-strip {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .toolbar-select {
+    .toolbar-select--sort {
         width: 100%;
     }
 }
 
 @media (max-width: 520px) {
-    body {
-        padding: 12px;
-    }
-
-    .header-controls {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .header-actions {
-        justify-content: flex-start;
-    }
-
-    .inventory-toolbar {
-        padding: 12px;
-    }
-}
-
-@media (max-width: 480px) {
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .inventory-list--grid .stats-grid {
-        grid-template-columns: 1fr;
+    .app-main {
+        padding: 10px 12px 24px;
     }
 }
