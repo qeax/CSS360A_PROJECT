@@ -2,7 +2,7 @@
 # Docker Compose merges it automatically for local dev. Do not commit the real override.
 # Production on Ubuntu should run without this file (Traefik + published image only).
 #
-# Also copy `.env.example` → `.env` and set DEV_AUTH_BYPASS=true (see LOCAL_DEVELOPMENT.md).
+# Also copy `.env.example` → `.env` and set DEV_AUTH_BYPASS=true (see Readme.md — Local development).
 
 services:
   backend:
