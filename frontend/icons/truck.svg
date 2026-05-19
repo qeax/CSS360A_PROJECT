@@ -1,0 +1,4 @@
+<!-- Source: Heroicons v2 (MIT) https://github.com/tailwindlabs/heroicons — outline truck 24px -->
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="#10b981" width="24" height="24" aria-hidden="true">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m6 4.5v-4.5m-6 4.5h15.75a1.5 1.5 0 001.5-1.5v-9a1.5 1.5 0 00-1.5-1.5H9.75a1.5 1.5 0 00-1.5 1.5v4.5m6 4.5h1.5m-9-9h.375a1.125 1.125 0 011.125 1.125v2.25m0 0H21" />
+</svg>

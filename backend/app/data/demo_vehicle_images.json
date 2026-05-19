@@ -1,0 +1,194 @@
+{
+  "default": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Toyota|Camry": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2007_Toyota_Camry_XLE_V6.jpg/800px-2007_Toyota_Camry_XLE_V6.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg/800px-2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg/800px-2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg"
+  ],
+  "Toyota|RAV4": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2007_Toyota_Camry_XLE_V6.jpg/800px-2007_Toyota_Camry_XLE_V6.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg/800px-2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg/800px-2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg"
+  ],
+  "Honda|Civic": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg/800px-2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/2017_Honda_Civic_Hatchback_Sport_Touring_in_white%2C_front_left.jpg/800px-2017_Honda_Civic_Hatchback_Sport_Touring_in_white%2C_front_left.jpg"
+  ],
+  "Honda|Accord": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg/800px-2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/2017_Honda_Civic_Hatchback_Sport_Touring_in_white%2C_front_left.jpg/800px-2017_Honda_Civic_Hatchback_Sport_Touring_in_white%2C_front_left.jpg"
+  ],
+  "Ford|F-150": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Ford|Escape": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Chevrolet|Silverado": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Chevrolet|Equinox": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Nissan|Altima": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2007_Toyota_Camry_XLE_V6.jpg/800px-2007_Toyota_Camry_XLE_V6.jpg"
+  ],
+  "Nissan|Rogue": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2007_Toyota_Camry_XLE_V6.jpg/800px-2007_Toyota_Camry_XLE_V6.jpg"
+  ],
+  "BMW|330i": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/2019_BMW_330i_%28G20%29_1X7A7777.jpg/800px-2019_BMW_330i_%28G20%29_1X7A7777.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/BMW_G20_IMG_0367.jpg/800px-BMW_G20_IMG_0367.jpg"
+  ],
+  "BMW|X3": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/2019_BMW_330i_%28G20%29_1X7A7777.jpg/800px-2019_BMW_330i_%28G20%29_1X7A7777.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/BMW_G20_IMG_0367.jpg/800px-BMW_G20_IMG_0367.jpg"
+  ],
+  "Mercedes-Benz|C300": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/2019_BMW_330i_%28G20%29_1X7A7777.jpg/800px-2019_BMW_330i_%28G20%29_1X7A7777.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/BMW_G20_IMG_0367.jpg/800px-BMW_G20_IMG_0367.jpg"
+  ],
+  "Audi|A4": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/2019_BMW_330i_%28G20%29_1X7A7777.jpg/800px-2019_BMW_330i_%28G20%29_1X7A7777.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/BMW_G20_IMG_0367.jpg/800px-BMW_G20_IMG_0367.jpg"
+  ],
+  "Hyundai|Elantra": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg/800px-2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg"
+  ],
+  "Kia|Telluride": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg"
+  ],
+  "Subaru|Outback": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Volkswagen|Jetta": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Mazda|CX-5": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Jeep|Grand Cherokee": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg"
+  ],
+  "Tesla|Model 3": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/2019_Tesla_Model_3_Performance_AWD_Front.jpg/800px-2019_Tesla_Model_3_Performance_AWD_Front.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Tesla_Model_3_parked%2C_front_view.jpg/800px-Tesla_Model_3_parked%2C_front_view.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/2020_Tesla_Model_3_front_view.jpg/800px-2020_Tesla_Model_3_front_view.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Tesla_Model_3_%282018%29_01.jpg/800px-Tesla_Model_3_%282018%29_01.jpg"
+  ],
+  "Volvo|XC60": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg"
+  ],
+  "Lexus|RX 350": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2007_Toyota_Camry_XLE_V6.jpg/800px-2007_Toyota_Camry_XLE_V6.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg/800px-2015_Toyota_Camry_XSE_V6_in_attitude_black_metallic%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg/800px-2018_Toyota_Camry_LE_%28AXVH71%29_hybrid_sedan_%282018-08-06%29_01.jpg"
+  ],
+  "GMC|Sierra": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Ram|1500": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg/800px-2015_Ford_F-150_XLT_SuperCrew_4x4_in_Ingot_Silver%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg/800px-2013_Ford_F-150_XLT_SuperCrew_4x4_in_Blue_Jeans_Metallic%2C_front_left.jpg"
+  ],
+  "Acura|TLX": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg/800px-2022_Honda_Civic_EX_sedan_in_Sonic_Gray_Pearl%2C_front_left.jpg"
+  ],
+  "Infiniti|Q50": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg/800px-2020_BMW_330i_xDrive_in_Mineral_White%2C_front_left.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg"
+  ],
+  "Cadillac|XT5": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg/800px-2021_Ford_F-150_Lariat_SuperCrew_4x4_in_Agate_Black%2C_front_left.jpg"
+  ],
+  "Buick|Enclave": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Chrysler|Pacifica": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg/800px-2018_Ford_F-150_XLT_SuperCrew%2C_front_3.23.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg"
+  ],
+  "Dodge|Charger": [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg/800px-2012_Honda_Civic_Sedan_%28FB%29_EX-L_front_01.11.20.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg/800px-2018_BMW_330i_M_Sport_%28G20%29_front_10.13.19.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2018_Toyota_Camry_SE_front_9.8.18.jpg/800px-2018_Toyota_Camry_SE_front_9.8.18.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/2016_Honda_Civic_Touring_front_3.21.19.jpg/800px-2016_Honda_Civic_Touring_front_3.21.19.jpg"
+  ]
+}

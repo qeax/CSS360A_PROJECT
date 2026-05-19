@@ -1,0 +1,218 @@
+.app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--topbar-z);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: var(--topbar-height);
+    padding: 0 20px;
+    box-sizing: border-box;
+    background: var(--topbar-bg);
+    color: var(--topbar-fg);
+    border-bottom: 1px solid var(--topbar-border);
+}
+
+.app-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    text-decoration: none;
+    color: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+}
+
+.app-brand-car {
+    display: block;
+    transform: rotate(180deg);
+    color: var(--topbar-accent);
+}
+
+.app-brand-icon {
+    display: flex;
+    align-items: center;
+    color: var(--topbar-accent);
+}
+
+.app-brand-text {
+    white-space: nowrap;
+}
+
+.app-topbar-search {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    max-width: 520px;
+    margin: 0 auto;
+    min-width: 0;
+}
+
+.app-topbar-search-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--topbar-border);
+    border-right: none;
+    border-radius: 999px 0 0 999px;
+    padding: 10px 16px;
+    font-size: 14px;
+    background: var(--topbar-input-bg);
+    color: var(--topbar-fg);
+    outline: none;
+}
+
+.app-topbar-search-input::placeholder {
+    color: var(--topbar-muted);
+}
+
+.app-topbar-search-input:focus {
+    border-color: var(--topbar-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--topbar-accent) 25%, transparent);
+}
+
+.app-topbar-search-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    border: 1px solid var(--topbar-border);
+    border-radius: 0 999px 999px 0;
+    background: var(--topbar-accent);
+    color: #fff;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.app-topbar-search-btn:hover {
+    filter: brightness(1.08);
+}
+
+.app-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.app-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--topbar-border);
+    background: color-mix(in srgb, var(--topbar-input-bg) 88%, transparent);
+    color: var(--topbar-fg);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.app-icon-btn:hover {
+    background: color-mix(in srgb, var(--topbar-input-bg) 100%, transparent);
+}
+
+body.light-theme .app-icon-btn-sun {
+    display: none;
+}
+
+body:not(.light-theme) .app-icon-btn-moon {
+    display: none;
+}
+
+body:not(.light-theme) .app-icon-btn-sun {
+    display: block;
+}
+
+body.light-theme .app-icon-btn-moon {
+    display: block;
+}
+
+.app-account {
+    position: relative;
+}
+
+.app-account-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 220px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--topbar-border);
+    background: color-mix(in srgb, var(--topbar-input-bg) 88%, transparent);
+    color: var(--topbar-fg);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.app-account-trigger:hover {
+    background: color-mix(in srgb, var(--topbar-input-bg) 100%, transparent);
+}
+
+.app-account-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--topbar-accent), color-mix(in srgb, var(--topbar-accent) 60%, #000));
+    flex-shrink: 0;
+}
+
+.app-account-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.app-account-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 180px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--topbar-border);
+    background: var(--topbar-input-bg);
+    color: var(--topbar-fg);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    z-index: 80;
+}
+
+.app-account-menu[hidden] {
+    display: none;
+}
+
+.app-account-menu-item {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.app-account-menu-item:hover {
+    background: color-mix(in srgb, var(--topbar-accent) 18%, transparent);
+}
+
+@media (max-width: 720px) {
+    .app-topbar {
+        flex-wrap: wrap;
+        padding: 10px 12px;
+        gap: 10px;
+    }
+
+    .app-topbar-search {
+        order: 3;
+        flex: 1 1 100%;
+        max-width: none;
+    }
+
+    .app-brand-text {
+        font-size: 0.9rem;
+    }
+}

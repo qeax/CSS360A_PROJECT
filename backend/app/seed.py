@@ -1,59 +1,47 @@
 """
-Load demo rows from seeds/cars_seed.json when the cars table is empty.
+Load demo inventory when the cars table is empty.
 
-Rows are inserted with source=demo so they can be removed later via python -m app.purge_demo.
+By default **no rows are written**: the API serves the same deterministic demo
+catalog from memory (see ``DEMO_IN_MEMORY_WHEN_EMPTY`` and ``repositories.cars``).
 
-Run: python -m app.seed (from backend directory, with PYTHONPATH=. or installed package)
+To **persist** demo rows into MySQL, set ``SEED_WRITE_DEMO_TO_DB=1``.
+
+Run: python -m app.seed (from backend directory)
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import os
 
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
+from app.demo_seed import insert_generated_demo_cars
 from app.models.car import Car
 
 
-def seed_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "seeds" / "cars_seed.json"
-
-
 def run() -> int:
-    path = seed_path()
-    if not path.is_file():
-        print(f"Seed file not found: {path}")
-        return 1
-
-    rows = json.loads(path.read_text(encoding="utf-8"))
     db = SessionLocal()
     try:
         count = db.scalar(select(func.count()).select_from(Car)) or 0
         if count > 0:
             print("Cars table is not empty; skipping seed.")
             return 0
-        for row in rows:
-            allowed = {
-                "brand",
-                "model",
-                "year",
-                "price",
-                "repair_cost",
-                "resale_value",
-                "mileage",
-                "condition",
-                "image_url",
-                "source",
-                "external_listing_id",
-                "listing_url",
-                "raw_listing_json",
-            }
-            data = {k: row[k] for k in allowed if k in row}
-            db.add(Car(**data))
-        db.commit()
-        print(f"Seeded {len(rows)} cars.")
+
+        write_demo = os.getenv("SEED_WRITE_DEMO_TO_DB", "").lower() in ("1", "true", "yes")
+
+        if write_demo:
+            n = int(os.environ.get("DEMO_SEED_COUNT", "100"))
+            inserted = insert_generated_demo_cars(db, n)
+            db.commit()
+            print(f"Seeded {inserted} generated demo cars into the database.")
+            return 0
+
+        print(
+            "Cars table is empty; no DB seed written. "
+            "Inventory is served from the in-memory demo catalog (default). "
+            "To insert demo rows into MySQL, set SEED_WRITE_DEMO_TO_DB=1."
+        )
         return 0
     except Exception as e:
         db.rollback()

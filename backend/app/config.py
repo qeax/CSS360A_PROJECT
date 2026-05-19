@@ -15,7 +15,7 @@ def get_cors_origins() -> list[str]:
     if raw:
         return [x.strip() for x in raw.split(",") if x.strip()]
     if is_production():
-        return ["https://css360.qeax.cloud"]
+        return []
     return [
         "http://localhost",
         "http://127.0.0.1",
@@ -44,6 +44,23 @@ def get_auth_session_secret() -> Optional[str]:
     return os.getenv("AUTH_SESSION_SECRET")
 
 
+def is_dev_auth_bypass_enabled() -> bool:
+    """Local-only fake login when Microsoft Entra is not configured. Never active in production."""
+    if is_production():
+        return False
+    flag = os.getenv("DEV_AUTH_BYPASS", "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
+
+
+def get_dev_auth_email() -> str:
+    raw = os.getenv("DEV_AUTH_EMAIL", "dev@localhost")
+    email = (raw or "dev@localhost").strip()
+    return email or "dev@localhost"
+
+
+DEV_AUTH_AZURE_OID = "local-dev-bypass"
+
+
 def get_allowed_email_domain() -> Optional[str]:
     raw = os.getenv("ALLOWED_EMAIL_DOMAIN")
     return raw.strip().lower() if raw else None
@@ -51,6 +68,8 @@ def get_allowed_email_domain() -> Optional[str]:
 
 def require_auth_env_at_startup() -> None:
     """Fail fast in production if SSO secrets are missing."""
+    if is_production() and is_dev_auth_bypass_enabled():
+        raise RuntimeError("DEV_AUTH_BYPASS must not be enabled when APP_ENV is production.")
     if not is_production():
         return
     missing = []
@@ -60,6 +79,7 @@ def require_auth_env_at_startup() -> None:
         ("AZURE_AD_CLIENT_SECRET", get_azure_ad_client_secret()),
         ("AZURE_AD_REDIRECT_URI", get_azure_ad_redirect_uri()),
         ("AUTH_SESSION_SECRET", get_auth_session_secret()),
+        ("CORS_ORIGINS", os.getenv("CORS_ORIGINS", "").strip()),
     ):
         if not val:
             missing.append(name)

@@ -36,6 +36,10 @@ if [ "$alembic_ok" != "1" ]; then
   exit 1
 fi
 
+if [ "${PURGE_DEMO_ON_START}" = "true" ]; then
+  python -m app.purge_demo
+fi
+
 if [ "${SEED_ON_START}" = "true" ]; then
   python -m app.seed
 fi
