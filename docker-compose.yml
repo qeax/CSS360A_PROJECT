@@ -10,12 +10,14 @@ services:
             - ./.env
         environment:
             SEED_ON_START: ${SEED_ON_START:-false}
+            PURGE_DEMO_ON_START: ${PURGE_DEMO_ON_START:-false}
         networks:
+            - css360_internal
             - proxy_network
         labels:
             - "traefik.enable=true"
             # Router for backend: catching everything from the path /api/
-            - "traefik.http.routers.css360-backend.rule=Host(`css360.qeax.cloud`) && PathPrefix(`/api`)"
+            - "traefik.http.routers.css360-backend.rule=Host(`${APP_PUBLIC_HOST}`) && PathPrefix(`/api`)"
             - "traefik.http.routers.css360-backend.entrypoints=websecure"
             - "traefik.http.routers.css360-backend.tls.certresolver=letsencrypt"
             - "traefik.http.services.css360-backend.loadbalancer.server.port=8000"
@@ -28,7 +30,11 @@ services:
         image: nginx:alpine
         container_name: css360_frontend
         restart: unless-stopped
+        depends_on:
+            backend:
+                condition: service_started
         networks:
+            - css360_internal
             - proxy_network
         volumes:
             - ./frontend:/usr/share/nginx/html:ro
@@ -36,7 +42,7 @@ services:
         labels:
             - "traefik.enable=true"
             # Router for frontend: everything else
-            - "traefik.http.routers.css360-frontend.rule=Host(`css360.qeax.cloud`)"
+            - "traefik.http.routers.css360-frontend.rule=Host(`${APP_PUBLIC_HOST}`)"
             - "traefik.http.routers.css360-frontend.entrypoints=websecure"
             - "traefik.http.routers.css360-frontend.tls.certresolver=letsencrypt"
             - "traefik.http.services.css360-frontend.loadbalancer.server.port=80"
@@ -57,6 +63,7 @@ services:
         volumes:
             - mariadb_data:/var/lib/mysql
         networks:
+            - css360_internal
             - proxy_network
         healthcheck:
             test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
@@ -70,5 +77,9 @@ volumes:
     
 
 networks:
+    # Compose-assigned DNS (service names like `backend`, `db`) — fixes nginx→backend 502
+    # when only an external network was used on some Docker Desktop setups.
+    css360_internal:
+        driver: bridge
     proxy_network:
         external: true

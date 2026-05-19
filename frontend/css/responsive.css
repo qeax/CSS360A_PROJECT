@@ -1,0 +1,24 @@
+@media (max-width: 600px) {
+    .inventory-list--grid {
+        grid-template-columns: 1fr;
+    }
+
+    .view-toggle {
+        margin-left: 0;
+    }
+
+    .inventory-toolbar-strip {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .toolbar-select--sort {
+        width: 100%;
+    }
+}
+
+@media (max-width: 520px) {
+    .app-main {
+        padding: 10px 12px 24px;
+    }
+}

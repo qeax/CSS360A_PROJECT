@@ -19,6 +19,12 @@ function initTheme() {
     }
 }
 
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    const isLight = document.body.classList.contains('light-theme');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+
 function showErrorFromQuery() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('error');
@@ -43,6 +49,7 @@ async function redirectIfAuthenticated() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
     showErrorFromQuery();
     redirectIfAuthenticated();
 });
