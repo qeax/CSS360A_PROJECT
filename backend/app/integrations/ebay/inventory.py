@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.integrations.ebay.client import get_ebay_client
+from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 
 logger = logging.getLogger(__name__)
 
@@ -160,16 +161,26 @@ def fetch_ebay_inventory_views(query: str | None = None, *, limit: int = 50) -> 
     if len(q) < 3:
         q = _default_ebay_query()
 
-    cache_key = q.lower()
+    try:
+        search_limit = max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "24")), 50))
+    except ValueError:
+        search_limit = 24
+
+    cat = (os.getenv("EBAY_CATEGORY_IDS") or "6001").strip()
+    cache_key = f"{q.lower()}|cat={cat}"
     now = time.time()
     cached = _ebay_cache.get(cache_key)
     if cached and cached[0] > now:
         return list(cached[1])
 
-    raw = client.search_listings_enriched(query=q, limit=min(limit, 50))
+    raw = client.search_listings_enriched(query=q, limit=min(limit, search_limit))
     views: list[Any] = []
-    for i, item in enumerate(raw, start=1):
-        view = ebay_listing_dict_to_car_view(item, i)
+    idx = 0
+    for item in raw:
+        if not is_likely_vehicle_listing(item):
+            continue
+        idx += 1
+        view = ebay_listing_dict_to_car_view(item, idx)
         if view is not None:
             views.append(view)
 

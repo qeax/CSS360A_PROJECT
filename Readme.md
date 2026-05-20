@@ -121,7 +121,17 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | Optional: live eBay inventory on `/cars` when MySQL has no rows (sandbox listings stay in memory only) |
 | `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
-| `EBAY_GET_ITEM_MAX` | How many search hits to enrich via `getItem` per request (default `20`; `0` = search only) |
+| `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
+| `EBAY_SEARCH_LIMIT` | Max search hits per request (default `24`) |
+| `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `10`; `0` = search only) |
+
+Clear all inventory in MySQL (cars + external sellers):
+
+```bash
+docker compose exec backend python -m app.purge_inventory
+```
+
+One-time on container start: `PURGE_INVENTORY_ON_START=true` in `.env`.
 
 If eBay credentials are unset, an empty `cars` table still serves the **demo catalog** (`DEMO_IN_MEMORY_WHEN_EMPTY`).
 
