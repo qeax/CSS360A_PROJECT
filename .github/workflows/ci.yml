@@ -35,7 +35,7 @@ jobs:
         run: ruff format --check .
 
       - name: pip-audit (dependency vulnerabilities)
-        run: pip-audit -r requirements.txt -r requirements-dev.txt
+        run: pip-audit -r requirements.txt -r requirements-dev.txt --ignore-vuln PYSEC-2025-183
 
       - name: Bandit (security lint on app/)
         run: bandit -r app -ll

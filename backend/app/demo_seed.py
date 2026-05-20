@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.models.car import Car
 from app.models.car_satellite import CarListingTerms, CarLocation, CarMedia, VehicleAspectSnapshot
+from app.services.flip import estimate_flip_economics
 
 _BRAND_MODEL = [
     ("Toyota", "Camry"),
@@ -165,10 +166,6 @@ def iter_demo_specs(n: int, rng: random.Random) -> Iterator[dict[str, Any]]:
         brand, model = rng.choice(_BRAND_MODEL)
         year = rng.randint(2012, 2024)
         price = float(rng.randint(55, 420)) * 100 + rng.choice([0, 50, 95])
-        repair = float(rng.randint(2, 45)) * 100
-        resale = price - repair + float(rng.randint(15, 120)) * 100
-        if resale <= price * 0.95:
-            resale = price * 1.04 + rng.randint(500, 8000)
         mileage = rng.randint(8000, 145000)
         condition = rng.choice(_CONDITIONS)
         fmt = rng.choice(_LISTING_FORMATS)
@@ -200,6 +197,18 @@ def iter_demo_specs(n: int, rng: random.Random) -> Iterator[dict[str, Any]]:
         if fmt == "AUCTION":
             bid_count = rng.randint(1, 24)
             listing_ends_at = _DEMO_AUCTION_BASE + timedelta(hours=rng.randint(2, 72))
+
+        econ = estimate_flip_economics(
+            price,
+            year=year,
+            mileage=mileage,
+            condition=condition,
+            vehicle_title=vtitle,
+            listing_format=fmt,
+            listing_id=ext_id,
+        )
+        repair = econ["repair_cost"]
+        resale = econ["resale_value"]
 
         yield {
             "index": i,
