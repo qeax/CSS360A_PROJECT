@@ -6,6 +6,6 @@ cryptography
 alembic
 httpx
 requests>=2.32.0
-PyJWT
+PyJWT>=2.12.1
 itsdangerous
 python-dotenv==1.2.2

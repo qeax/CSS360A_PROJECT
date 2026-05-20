@@ -1,4 +1,8 @@
-from app.services.flip import calculate_flip_score, estimate_flip_from_listing
+from app.services.flip import (
+    calculate_flip_score,
+    estimate_flip_economics,
+    estimate_flip_from_listing,
+)
 
 
 def test_positive_profit_and_roi():
@@ -34,6 +38,7 @@ def test_heuristic_varies_by_vehicle_factors():
         mileage=25_000,
         condition="Used",
         vehicle_title="Clean",
+        listing_id="a",
     )
     high_mi_salvage = estimate_flip_from_listing(
         20_000,
@@ -41,6 +46,7 @@ def test_heuristic_varies_by_vehicle_factors():
         mileage=165_000,
         condition="Used",
         vehicle_title="Salvage",
+        listing_id="b",
     )
     roi_clean = calculate_flip_score(20_000, low_mi_clean[1], low_mi_clean[0])["roi"]
     roi_salvage = calculate_flip_score(20_000, high_mi_salvage[1], high_mi_salvage[0])["roi"]
@@ -50,6 +56,38 @@ def test_heuristic_varies_by_vehicle_factors():
 
 def test_heuristic_not_always_four_percent():
     repair, resale = estimate_flip_from_listing(
-        15_000, year=2018, mileage=72_000, vehicle_title="Clean"
+        15_000,
+        year=2018,
+        mileage=72_000,
+        vehicle_title="Clean",
+        listing_id="c",
     )
     assert calculate_flip_score(15_000, resale, repair)["roi"] != 4.0
+
+
+def test_economics_missing_fields_not_extreme():
+    sparse = estimate_flip_economics(18_000, listing_id="sparse")
+    with_year = estimate_flip_economics(18_000, year=2015, listing_id="y")
+    assert 200 <= sparse["repair_cost"] <= 18_000 * 0.25
+    assert sparse["repair_cost"] != with_year["repair_cost"]
+
+
+def test_wrapper_matches_economics():
+    econ = estimate_flip_economics(
+        20_000,
+        year=2019,
+        mileage=50_000,
+        condition="Used",
+        vehicle_title="Clean",
+        listing_id="w",
+    )
+    repair, resale = estimate_flip_from_listing(
+        20_000,
+        year=2019,
+        mileage=50_000,
+        condition="Used",
+        vehicle_title="Clean",
+        listing_id="w",
+    )
+    assert repair == econ["repair_cost"]
+    assert resale == econ["resale_value"]
