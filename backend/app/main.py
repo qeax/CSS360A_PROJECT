@@ -1,11 +1,9 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from dotenv import load_dotenv
-load_dotenv()
-from app.api.routes import auth, cars, health, ebay
 
-from app.api.routes import auth, cars, health
+from app.api.routes import auth, cars, ebay, health
 from app.config import (
     get_auth_session_secret,
     get_cors_origins,
@@ -13,6 +11,7 @@ from app.config import (
     require_auth_env_at_startup,
 )
 
+load_dotenv()
 require_auth_env_at_startup()
 
 _docs_disabled = is_production()
