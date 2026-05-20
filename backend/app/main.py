@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+from app.api.routes import auth, cars, health, ebay
 
 from app.api.routes import auth, cars, health
 from app.config import (
@@ -44,3 +47,4 @@ app.include_router(cars.router)
 app.include_router(cars.router, prefix="/api")
 app.include_router(health.router)
 app.include_router(health.router, prefix="/api")
+app.include_router(ebay.router, prefix="/api")
