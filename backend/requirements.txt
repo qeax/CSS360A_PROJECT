@@ -7,3 +7,4 @@ alembic
 httpx
 PyJWT
 itsdangerous
+python-dotenv==1.0.0
