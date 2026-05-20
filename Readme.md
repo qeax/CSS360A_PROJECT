@@ -90,7 +90,7 @@ Implementation: [backend/app/api/routes/auth.py](backend/app/api/routes/auth.py)
 | [backend/app/api/routes/](backend/app/api/routes/) | HTTP: `/cars`, `/health`, `/auth/*` |
 | [backend/app/repositories/](backend/app/repositories/) | Database queries |
 | [backend/app/services/](backend/app/services/) | ROI, geo, body style, OIDC |
-| [backend/app/integrations/ebay/](backend/app/integrations/ebay/) | Placeholder for eBay integration |
+| [backend/app/integrations/ebay/](backend/app/integrations/ebay/) | eBay Browse API (in-memory on main `/cars` when DB empty; not persisted in sandbox) |
 
 ### Frontend
 
@@ -119,6 +119,11 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `ALLOWED_EMAIL_DOMAIN` | Optional email domain restriction |
 | `APP_PUBLIC_HOST` | Hostname for Traefik (no scheme), e.g. `app.example.com` |
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | Optional: live eBay inventory on `/cars` when MySQL has no rows (sandbox listings stay in memory only) |
+| `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
+| `EBAY_GET_ITEM_MAX` | How many search hits to enrich via `getItem` per request (default `20`; `0` = search only) |
+
+If eBay credentials are unset, an empty `cars` table still serves the **demo catalog** (`DEMO_IN_MEMORY_WHEN_EMPTY`).
 
 Use placeholders in docs and examples: `<your-domain>`, `<tenant-id>`, `<secret>`.
 
@@ -133,8 +138,7 @@ Workflow [`.github/workflows/cd.yml`](.github/workflows/cd.yml) deploys on push 
 | `DB_*`, `MYSQL_ROOT_PASSWORD` | Database |
 | `SEED_ON_START`, `PURGE_DEMO_ON_START` | Seed / purge on deploy |
 | `AZURE_AD_*`, `AUTH_SESSION_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `CORS_ORIGINS` | SSO and CORS |
-
-New integrations (e.g. eBay API keys) follow the same pattern: GitHub secret → workflow `env` → line in `cat > .env` on the server.
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX`, `EBAY_DEFAULT_QUERY` | eBay Browse API (optional) |
 
 ### Public repository safety
 

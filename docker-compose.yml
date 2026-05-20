@@ -11,6 +11,11 @@ services:
         environment:
             SEED_ON_START: ${SEED_ON_START:-false}
             PURGE_DEMO_ON_START: ${PURGE_DEMO_ON_START:-false}
+            EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+            EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+            EBAY_SANDBOX: ${EBAY_SANDBOX:-true}
+            EBAY_DEFAULT_QUERY: ${EBAY_DEFAULT_QUERY:-car}
+            EBAY_GET_ITEM_MAX: ${EBAY_GET_ITEM_MAX:-20}
         networks:
             - css360_internal
             - proxy_network

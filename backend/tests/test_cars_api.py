@@ -1,8 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.integrations.ebay.client import reset_ebay_client
 from app.main import app
-from app.repositories.cars import _normalize_listing_format
+from app.repositories.cars import _normalize_listing_format, invalidate_in_memory_demo_cache
 
 
 def test_normalize_listing_format_accepts_offer_not_auction():
@@ -160,6 +161,18 @@ def test_demo_auction_listing_has_bids_and_end_time(client):
     assert car.get("listing_format") == "AUCTION"
     assert car.get("bid_count") is not None
     assert car.get("listing_ends_at")
+
+
+def test_cars_uses_demo_when_ebay_not_configured(client, monkeypatch):
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    reset_ebay_client()
+    invalidate_in_memory_demo_cache()
+    response = client.get("/cars", params={"limit": 5})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 1
+    assert any((i.get("source") or "") == "demo" for i in data["items"])
 
 
 def test_cars_q_soft_partial_brand_model(client):
