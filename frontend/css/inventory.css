@@ -361,14 +361,46 @@ article.car-card:focus-within .car-card-carousel-dots {
     min-width: 0;
 }
 
+.car-card-spec-line--link {
+    margin-top: 2px;
+}
+
+.car-card-listing-link {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--accent-green);
+    text-decoration: none;
+    text-underline-offset: 2px;
+}
+
+.car-card-listing-link:hover {
+    text-decoration: underline;
+}
+
 .car-card-footer {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     gap: 12px;
     margin-top: auto;
     padding-top: 8px;
     padding-bottom: 2px;
+}
+
+.car-card-footer-start {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
+.car-card-listing-link--footer {
+    font-size: 0.8125rem;
+    padding: 4px 0;
 }
 
 

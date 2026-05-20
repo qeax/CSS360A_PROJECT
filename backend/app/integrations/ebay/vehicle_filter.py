@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+_YEAR_IN_TITLE_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
 
 _NON_VEHICLE_MARKERS = frozenset(
     {
@@ -41,7 +44,7 @@ def is_likely_vehicle_listing(item: dict[str, Any]) -> bool:
     if mileage is not None:
         try:
             mi = int(mileage)
-            if 500 <= mi <= 500_000:
+            if mi >= 500:
                 return True
         except (TypeError, ValueError):
             pass
@@ -50,11 +53,14 @@ def is_likely_vehicle_listing(item: dict[str, Any]) -> bool:
         price = float(item.get("price") or 0)
     except (TypeError, ValueError):
         price = 0.0
-    if price >= 1_000 and _has_vehicle_title_hint(title):
-        return True
 
-    if brand and brand not in ("ebay", "unknown", "listing") and item.get("model"):
-        return True
+    if price >= 1000:
+        if _YEAR_IN_TITLE_RE.search(title):
+            return True
+        if _has_vehicle_title_hint(title):
+            return True
+        if brand and brand not in ("ebay", "unknown", "listing") and item.get("model"):
+            return True
 
     return False
 

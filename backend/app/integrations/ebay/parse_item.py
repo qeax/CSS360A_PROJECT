@@ -14,7 +14,19 @@ from app.integrations.ebay.get_item_mapping import (
 )
 
 _YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
-_MILEAGE_RE = re.compile(r"([\d,]+)")
+_MILEAGE_WITH_UNIT_RE = re.compile(
+    r"([\d,]+)\s*(?:,\d{3})*\s*(?:mi|miles|mile)\b",
+    re.IGNORECASE,
+)
+_K_MILES_RE = re.compile(
+    r"([\d,.]+)\s*k\s*(?:mi|miles|mile)?\b",
+    re.IGNORECASE,
+)
+_DIGITS_RE = re.compile(r"([\d,]+)")
+
+# Typical US used-car odometer range; excludes model years and engine sizes (e.g. 1.5L → 1500).
+MIN_PLAUSIBLE_ODOMETER_MI = 5000
+MAX_PLAUSIBLE_ODOMETER_MI = 350000
 
 _VEHICLE_TITLE_ASPECT_NAMES = frozenset(
     {
@@ -63,16 +75,49 @@ def _pick_aspect(amap: dict[str, str], names: tuple[str, ...]) -> Optional[str]:
     return None
 
 
+def is_plausible_odometer(value: int) -> bool:
+    """Reject model years and engine-displacement numbers mistaken for mileage."""
+    if 1980 <= value <= 2039:
+        return False
+    return MIN_PLAUSIBLE_ODOMETER_MI <= value <= MAX_PLAUSIBLE_ODOMETER_MI
+
+
 def _parse_mileage(raw: Optional[str]) -> Optional[int]:
-    if not raw:
+    if not raw or not isinstance(raw, str):
         return None
-    m = _MILEAGE_RE.search(raw.replace(" ", ""))
-    if not m:
+    text = raw.strip()
+    if not text:
         return None
-    try:
-        return int(m.group(1).replace(",", ""))
-    except ValueError:
+
+    m = _MILEAGE_WITH_UNIT_RE.search(text)
+    if m:
+        try:
+            value = int(m.group(1).replace(",", ""))
+            if is_plausible_odometer(value):
+                return value
+        except ValueError:
+            pass
+
+    km = _K_MILES_RE.search(text)
+    if km:
+        try:
+            value = int(float(km.group(1).replace(",", "")) * 1000)
+            if is_plausible_odometer(value):
+                return value
+        except ValueError:
+            pass
+
+    candidates: list[int] = []
+    for match in _DIGITS_RE.finditer(text):
+        try:
+            value = int(match.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        if is_plausible_odometer(value):
+            candidates.append(value)
+    if not candidates:
         return None
+    return max(candidates)
 
 
 def _parse_year_from_title(title: str) -> Optional[int]:
