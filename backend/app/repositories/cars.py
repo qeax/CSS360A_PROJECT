@@ -40,6 +40,7 @@ _PRICE_SLIDER_MIN = 0.0
 def _year_slider_bounds() -> tuple[int, int]:
     return _YEAR_SLIDER_MIN, _YEAR_SLIDER_MAX
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,11 +59,12 @@ def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]
     """Wide price/mileage spans for filter sliders; year range is fixed (_year_slider_bounds)."""
     demo = list(_get_cached_in_memory_cars())
     if not demo:
-        return (_PRICE_SLIDER_MIN, 42500.0), (_MILEAGE_BOUNDS_DEFAULT_MIN, _MILEAGE_BOUNDS_DEFAULT_MAX)
+        return (_PRICE_SLIDER_MIN, 42500.0), (
+            _MILEAGE_BOUNDS_DEFAULT_MIN,
+            _MILEAGE_BOUNDS_DEFAULT_MAX,
+        )
     prices = [float(c.price) for c in demo]
-    mileages = [
-        int(c.mileage) for c in demo if getattr(c, "mileage", None) is not None
-    ]
+    mileages = [int(c.mileage) for c in demo if getattr(c, "mileage", None) is not None]
     price_bounds = (_PRICE_SLIDER_MIN, max(prices))
     if mileages:
         mileage_bounds = (min(mileages), max(mileages))
@@ -86,6 +88,7 @@ def _resolve_mileage_meta_bounds(cars: list, *, inventory_source: str) -> tuple[
     if len(values) >= 2 and max(values) > min(values):
         return min(values), max(values)
     return _demo_catalog_slider_bounds()[1]
+
 
 _US_COUNTRY_ALIASES = frozenset({"united states", "us", "usa", "u.s.", "u.s.a."})
 
@@ -517,7 +520,7 @@ def apply_filters(
             body_style=body_style,
             vehicle_title=vt,
             drive_type=drive_type,
-            description_summary=car.description_summary or "",
+            description_summary=(getattr(car, "description_summary", None) or ""),
             tokens=q_toks,
         ):
             continue
@@ -553,7 +556,7 @@ def apply_filters(
                 "bid_count": car.bid_count,
                 "listing_format": _normalize_listing_format(car.listing_format)
                 or car.listing_format,
-                "description_summary": car.description_summary,
+                "description_summary": getattr(car, "description_summary", None),
                 "seller_username": seller_username,
                 "location": location_out,
                 "delivery": delivery,

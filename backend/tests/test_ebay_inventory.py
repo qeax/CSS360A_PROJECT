@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.integrations.ebay.inventory import ebay_listing_dict_to_car_view, resolve_listing_url
-from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.integrations.ebay.parse_item import _parse_mileage, merge_search_summary, parse_get_item
+from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.repositories.cars import (
     _MILEAGE_BOUNDS_DEFAULT_MAX,
     _MILEAGE_BOUNDS_DEFAULT_MIN,
@@ -232,6 +232,8 @@ def test_apply_filters_handles_ebay_string_listing_ends_at():
         aspect_snapshots=[],
         image_url=None,
         media=[],
+        description_summary="2019 Toyota Camry",
+        source="ebay",
     )
     out = apply_filters(
         [car],
