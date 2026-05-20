@@ -186,14 +186,14 @@ def test_resolve_mileage_meta_bounds_uses_listing_values():
 
 def test_resolve_listing_url_from_ebay_item_id():
     assert resolve_listing_url("v1|1234567890|0", None) == "https://www.ebay.com/itm/1234567890"
-    assert resolve_listing_url(
-        "v1|99|0",
-        "https://www.ebay.com/itm/99",
-    ) == "https://www.ebay.com/itm/99"
     assert (
-        resolve_listing_url("v1|99|0", None, sandbox=True)
-        == "https://sandbox.ebay.com/itm/99"
+        resolve_listing_url(
+            "v1|99|0",
+            "https://www.ebay.com/itm/99",
+        )
+        == "https://www.ebay.com/itm/99"
     )
+    assert resolve_listing_url("v1|99|0", None, sandbox=True) == "https://sandbox.ebay.com/itm/99"
 
 
 def test_listing_ends_at_iso_accepts_string_and_datetime():
@@ -218,9 +218,7 @@ def test_apply_filters_handles_ebay_string_listing_ends_at():
         vehicle_title="Clean",
         listing_format="BUY_IT_NOW",
         listing_ends_at="2026-06-01T00:00:00+00:00",
-        listing_terms=SimpleNamespace(
-            ship_to_home=True, local_pickup=False, in_store_pickup=False
-        ),
+        listing_terms=SimpleNamespace(ship_to_home=True, local_pickup=False, in_store_pickup=False),
         location=SimpleNamespace(
             country="United States",
             region="WA",
