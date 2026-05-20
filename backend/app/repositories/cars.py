@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import logging
 import os
 import re
 import unicodedata
@@ -10,6 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.demo_seed import build_in_memory_demo_car_views, pick_media_urls_for_car
+from app.integrations.ebay.client import get_ebay_client
+from app.integrations.ebay.inventory import (
+    fetch_ebay_inventory_views,
+    invalidate_ebay_inventory_cache,
+)
 from app.models.car import Car
 from app.services.body_style import (
     extract_body_style_from_aspects_json,
@@ -20,11 +26,14 @@ from app.services.geo import haversine_km, latlng_pair
 
 _in_memory_demo_cache: list[Any] | None = None
 
+logger = logging.getLogger(__name__)
+
 
 def invalidate_in_memory_demo_cache() -> None:
     """Clear cached in-memory catalog (e.g. after tests or process reload)."""
     global _in_memory_demo_cache
     _in_memory_demo_cache = None
+    invalidate_ebay_inventory_cache()
 
 
 def _demo_in_memory_when_empty() -> bool:
@@ -43,7 +52,18 @@ def _get_cached_in_memory_cars() -> list[Any]:
     return _in_memory_demo_cache
 
 
-def _cars_for_inventory(db: Session) -> list[Any]:
+def _ebay_inventory_for_query(query: str | None) -> list[Any]:
+    """Live eBay sandbox/prod listings in memory only (never written to DB)."""
+    views = fetch_ebay_inventory_views(query)
+    if views:
+        return views
+    if _demo_in_memory_when_empty():
+        logger.info("eBay unavailable or empty; falling back to demo catalog")
+        return list(_get_cached_in_memory_cars())
+    return []
+
+
+def _cars_for_inventory(db: Session, *, inventory_query: str | None = None) -> list[Any]:
     if _stored_cars_exist(db):
         return db.scalars(
             select(Car)
@@ -56,13 +76,15 @@ def _cars_for_inventory(db: Session) -> list[Any]:
             )
             .order_by(Car.id)
         ).all()
+    if get_ebay_client().is_configured():
+        return _ebay_inventory_for_query(inventory_query)
     if _demo_in_memory_when_empty():
         return list(_get_cached_in_memory_cars())
     return []
 
 
-def iter_cars(db: Session):
-    return _cars_for_inventory(db)
+def iter_cars(db: Session, *, inventory_query: str | None = None):
+    return _cars_for_inventory(db, inventory_query=inventory_query)
 
 
 def _latest_aspects_json(car: Car) -> Any:
@@ -458,7 +480,7 @@ def apply_filters(
 
 def compute_inventory_meta(db: Session) -> dict[str, Any]:
     """Aggregate bounds and location hierarchy for filter UI (no auth logic here)."""
-    cars = _cars_for_inventory(db)
+    cars = _cars_for_inventory(db, inventory_query=None)
 
     if not cars:
         return {
