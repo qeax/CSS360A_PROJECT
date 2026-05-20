@@ -133,6 +133,7 @@ Workflow [`.github/workflows/cd.yml`](.github/workflows/cd.yml) deploys on push 
 | `DB_*`, `MYSQL_ROOT_PASSWORD` | Database |
 | `SEED_ON_START`, `PURGE_DEMO_ON_START` | Seed / purge on deploy |
 | `AZURE_AD_*`, `AUTH_SESSION_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `CORS_ORIGINS` | SSO and CORS |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | eBay Browse/Buy API (`true` = sandbox) |
 
 New integrations (e.g. eBay API keys) follow the same pattern: GitHub secret → workflow `env` → line in `cat > .env` on the server.
 
