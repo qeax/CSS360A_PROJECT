@@ -26,4 +26,7 @@ repos:
           - backend/requirements.txt
           - -r
           - backend/requirements-dev.txt
+          # Disputed advisory (key length is app responsibility); no fixed release yet.
+          - --ignore-vuln
+          - PYSEC-2025-183
         pass_filenames: false
