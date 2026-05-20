@@ -39,9 +39,9 @@ def _ebay_category_ids() -> str | None:
 
 def _ebay_search_limit() -> int:
     try:
-        return max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "24")), 50))
+        return max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "50")), 50))
     except ValueError:
-        return 24
+        return 50
 
 
 class EbayListingClient:
