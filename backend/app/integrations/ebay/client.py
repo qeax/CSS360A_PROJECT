@@ -7,11 +7,27 @@ import base64
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+_client: "EbayListingClient | None" = None
+
+
+def get_ebay_client() -> "EbayListingClient":
+    global _client
+    if _client is None:
+        _client = EbayListingClient()
+    return _client
+
+
+def reset_ebay_client() -> None:
+    """Drop cached client (tests after env changes)."""
+    global _client
+    _client = None
 
 
 class EbayListingClient:
@@ -61,12 +77,12 @@ class EbayListingClient:
     def search_listings(
         self, query: str, max_price: Optional[int] = None, limit: int = 5
     ) -> List[Dict]:
-        """Search eBay for listings and return normalized results."""
+        """Search eBay for listings and return normalized results (empty list on failure)."""
         if not self.is_configured():
-            return [{"error": "eBay API not configured"}]
+            return []
         token = self._get_access_token()
         if not token:
-            return [{"error": "Failed to get eBay token"}]
+            return []
         try:
             url = f"{self.base_url}/buy/browse/v1/item_summary/search"
             headers = {
@@ -101,4 +117,51 @@ class EbayListingClient:
                 )
             return results
         except Exception as e:
-            return [{"error": f"eBay API request failed: {str(e)}"}]
+            logger.warning("eBay search failed: %s", e)
+            return []
+
+    def get_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch full listing details (localizedAspects, delivery, seller, etc.)."""
+        if not self.is_configured() or not item_id:
+            return None
+        token = self._get_access_token()
+        if not token:
+            return None
+        try:
+            encoded_id = quote(item_id, safe="")
+            url = f"{self.base_url}/buy/browse/v1/item/{encoded_id}"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            }
+            params = {"fieldgroups": "PRODUCT"}
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.warning("eBay getItem failed for %s: %s", item_id, e)
+            return None
+
+    def search_listings_enriched(
+        self, query: str, max_price: Optional[int] = None, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Search then hydrate rows with getItem (capped by EBAY_GET_ITEM_MAX)."""
+        summaries = self.search_listings(query=query, max_price=max_price, limit=limit)
+        if not summaries:
+            return []
+        try:
+            enrich_max = int(os.getenv("EBAY_GET_ITEM_MAX", "20"))
+        except ValueError:
+            enrich_max = 20
+        if enrich_max <= 0:
+            return summaries
+
+        from app.integrations.ebay.parse_item import merge_search_summary
+
+        enriched: List[Dict[str, Any]] = []
+        for row in summaries[:enrich_max]:
+            item_id = row.get("external_listing_id")
+            detail = self.get_item(item_id) if item_id else None
+            enriched.append(merge_search_summary(row, detail))
+        enriched.extend(summaries[enrich_max:])
+        return enriched

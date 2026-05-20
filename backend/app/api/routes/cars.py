@@ -69,7 +69,7 @@ def get_cars(
     _current_user: User = Depends(get_current_user),
 ):
     try:
-        rows = iter_cars(db)
+        rows = iter_cars(db, inventory_query=q)
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=503,

@@ -5,6 +5,7 @@ sqlalchemy>=2.0.49
 cryptography
 alembic
 httpx
+requests>=2.32.0
 PyJWT
 itsdangerous
 python-dotenv==1.2.2

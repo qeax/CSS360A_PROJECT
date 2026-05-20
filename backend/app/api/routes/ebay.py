@@ -2,10 +2,9 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.integrations.ebay.client import EbayListingClient
+from app.integrations.ebay.client import get_ebay_client
 
 router = APIRouter(prefix="/ebay", tags=["eBay"])
-ebay_client = EbayListingClient()
 
 
 @router.get("/search")
@@ -14,22 +13,27 @@ async def search_ebay_cars(
     max_price: Optional[int] = Query(None, ge=0, description="Maximum price filter"),
     limit: int = Query(5, ge=1, le=20, description="Number of results (1-20)"),
 ):
-    """Search eBay for car listings"""
-    if not ebay_client.is_configured():
+    """Debug endpoint: direct eBay search (main UI uses GET /cars)."""
+    client = get_ebay_client()
+    if not client.is_configured():
         raise HTTPException(
-            status_code=503, detail="eBay API credentials missing. Add EBAY_CLIENT_ID to .env"
+            status_code=503,
+            detail="eBay API credentials missing. Set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in .env",
         )
 
-    results = ebay_client.search_listings(query=query, max_price=max_price, limit=limit)
+    results = client.search_listings_enriched(query=query, max_price=max_price, limit=limit)
+    if not results:
+        raise HTTPException(status_code=502, detail="eBay search returned no results")
     return {"success": True, "count": len(results), "results": results}
 
 
 @router.get("/health")
 async def health_check():
-    """Check eBay API configuration status"""
+    """Check eBay API configuration status."""
+    client = get_ebay_client()
     return {
         "service": "eBay API",
-        "configured": ebay_client.is_configured(),
-        "sandbox": ebay_client.sandbox,
-        "base_url": ebay_client.base_url,
+        "configured": client.is_configured(),
+        "sandbox": client.sandbox,
+        "base_url": client.base_url,
     }
