@@ -2,6 +2,7 @@
 
 Fetches listing data from eBay and normalizes into our Car schema.
 """
+
 import base64
 import logging
 import os
@@ -21,9 +22,7 @@ class EbayListingClient:
         self.client_id = os.getenv("EBAY_CLIENT_ID")
         self.client_secret = os.getenv("EBAY_CLIENT_SECRET")
         self.sandbox = os.getenv("EBAY_SANDBOX", "true").lower() == "true"
-        self.base_url = (
-            "https://api.sandbox.ebay.com" if self.sandbox else "https://api.ebay.com"
-        )
+        self.base_url = "https://api.sandbox.ebay.com" if self.sandbox else "https://api.ebay.com"
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[datetime] = None
 
@@ -53,9 +52,7 @@ class EbayListingClient:
             response.raise_for_status()
             token_data = response.json()
             self.access_token = token_data["access_token"]
-            self.token_expiry = datetime.now() + timedelta(
-                seconds=token_data["expires_in"]
-            )
+            self.token_expiry = datetime.now() + timedelta(seconds=token_data["expires_in"])
             return self.access_token
         except Exception as e:
             logger.warning("eBay token error: %s", e)
@@ -95,16 +92,10 @@ class EbayListingClient:
                         "title": item.get("title"),
                         "price": p.get("value") if isinstance(p, dict) else None,
                         "currency": p.get("currency") if isinstance(p, dict) else None,
-                        "condition": cond.get("displayName")
-                        if isinstance(cond, dict)
-                        else None,
-                        "location_city": loc.get("city")
-                        if isinstance(loc, dict)
-                        else None,
+                        "condition": cond.get("displayName") if isinstance(cond, dict) else None,
+                        "location_city": loc.get("city") if isinstance(loc, dict) else None,
                         "listing_url": item.get("itemWebUrl"),
-                        "image_url": img.get("imageUrl")
-                        if isinstance(img, dict)
-                        else None,
+                        "image_url": img.get("imageUrl") if isinstance(img, dict) else None,
                         "source": "ebay",
                     }
                 )
