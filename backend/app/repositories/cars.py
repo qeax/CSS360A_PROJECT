@@ -480,7 +480,13 @@ def apply_filters(
 
 def compute_inventory_meta(db: Session) -> dict[str, Any]:
     """Aggregate bounds and location hierarchy for filter UI (no auth logic here)."""
-    cars = _cars_for_inventory(db, inventory_query=None)
+    # Do not call eBay on /cars/meta — it doubles latency and skews slider ranges.
+    if _stored_cars_exist(db):
+        cars = _cars_for_inventory(db, inventory_query=None)
+    elif get_ebay_client().is_configured():
+        cars = list(_get_cached_in_memory_cars())
+    else:
+        cars = _cars_for_inventory(db, inventory_query=None)
 
     if not cars:
         return {

@@ -6,6 +6,7 @@ Fetches listing data from eBay and normalizes into our Car schema.
 import base64
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -28,6 +29,19 @@ def reset_ebay_client() -> None:
     """Drop cached client (tests after env changes)."""
     global _client
     _client = None
+
+
+def _ebay_category_ids() -> str | None:
+    """eBay Motors / Cars & Trucks category (default 6001). Comma-separated allowed."""
+    raw = (os.getenv("EBAY_CATEGORY_IDS") or "6001").strip()
+    return raw or None
+
+
+def _ebay_search_limit() -> int:
+    try:
+        return max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "24")), 50))
+    except ValueError:
+        return 24
 
 
 class EbayListingClient:
@@ -89,7 +103,10 @@ class EbayListingClient:
                 "Authorization": f"Bearer {token}",
                 "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             }
-            params = {"q": query, "limit": limit}
+            params: dict[str, Any] = {"q": query, "limit": min(limit, _ebay_search_limit())}
+            category_ids = _ebay_category_ids()
+            if category_ids:
+                params["category_ids"] = category_ids
             if max_price:
                 params["filter"] = f"price:{{max:{max_price}}}"
             response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -150,18 +167,30 @@ class EbayListingClient:
         if not summaries:
             return []
         try:
-            enrich_max = int(os.getenv("EBAY_GET_ITEM_MAX", "20"))
+            enrich_max = int(os.getenv("EBAY_GET_ITEM_MAX", "10"))
         except ValueError:
-            enrich_max = 20
+            enrich_max = 10
         if enrich_max <= 0:
             return summaries
 
         from app.integrations.ebay.parse_item import merge_search_summary
 
-        enriched: List[Dict[str, Any]] = []
-        for row in summaries[:enrich_max]:
+        to_enrich = summaries[:enrich_max]
+        tail = summaries[enrich_max:]
+
+        def _enrich(row: Dict[str, Any]) -> Dict[str, Any]:
             item_id = row.get("external_listing_id")
             detail = self.get_item(item_id) if item_id else None
-            enriched.append(merge_search_summary(row, detail))
-        enriched.extend(summaries[enrich_max:])
+            return merge_search_summary(row, detail)
+
+        enriched: List[Dict[str, Any]] = []
+        workers = min(5, max(1, len(to_enrich)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_enrich, row) for row in to_enrich]
+            for fut in as_completed(futures):
+                try:
+                    enriched.append(fut.result())
+                except Exception as e:
+                    logger.warning("eBay enrich row failed: %s", e)
+        enriched.extend(tail)
         return enriched
