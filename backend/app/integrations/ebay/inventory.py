@@ -10,7 +10,9 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.integrations.ebay.client import get_ebay_client
+from app.integrations.ebay.parse_item import _parse_mileage, is_plausible_odometer
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
+from app.services.flip import estimate_flip_from_listing
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,32 @@ def invalidate_ebay_inventory_cache() -> None:
 
 def _default_ebay_query() -> str:
     return (os.getenv("EBAY_DEFAULT_QUERY") or "car").strip() or "car"
+
+
+def resolve_listing_url(
+    external_listing_id: str | None,
+    listing_url: str | None,
+    *,
+    sandbox: bool = False,
+) -> str | None:
+    """Return a browser-openable listing URL (Browse API ids look like v1|123|0)."""
+    url = (listing_url or "").strip()
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    item_id = (external_listing_id or "").strip()
+    if not item_id:
+        return None
+    numeric: str | None = None
+    if "|" in item_id:
+        parts = item_id.split("|")
+        if len(parts) >= 2 and parts[1].isdigit():
+            numeric = parts[1]
+    elif item_id.isdigit():
+        numeric = item_id
+    if not numeric:
+        return None
+    host = "sandbox.ebay.com" if sandbox else "www.ebay.com"
+    return f"https://{host}/itm/{numeric}"
 
 
 def _parse_year(title: str, year_hint: Any = None) -> int:
@@ -59,12 +87,6 @@ def _parse_brand_model(
     return "eBay", t[:128]
 
 
-def _flip_estimates(price: float) -> tuple[float, float]:
-    repair = round(price * 0.08, 2)
-    resale = round(price * 1.12, 2)
-    return repair, resale
-
-
 def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNamespace | None:
     """Map normalized eBay row (search + optional getItem) to a demo-compatible car view."""
     if item.get("error"):
@@ -81,9 +103,34 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
 
     brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
     year = _parse_year(title, item.get("year"))
-    repair, resale = _flip_estimates(price)
+    vehicle_title = (item.get("vehicle_title") or "Not Specified").strip()
+    condition = (item.get("condition") or "Used").strip()
+
+    mileage_for_flip = item.get("mileage")
+    if mileage_for_flip is not None:
+        try:
+            mileage_for_flip = int(mileage_for_flip)
+            if not is_plausible_odometer(mileage_for_flip):
+                mileage_for_flip = None
+        except (TypeError, ValueError):
+            mileage_for_flip = None
+    if mileage_for_flip is None:
+        mileage_for_flip = _parse_mileage(title)
+
+    repair, resale = estimate_flip_from_listing(
+        price,
+        year=year,
+        mileage=mileage_for_flip,
+        condition=condition,
+        vehicle_title=vehicle_title,
+    )
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
-    listing_url = item.get("listing_url") or f"https://www.ebay.com/itm/{ext_id}"
+    client = get_ebay_client()
+    listing_url = resolve_listing_url(
+        ext_id,
+        item.get("listing_url"),
+        sandbox=client.sandbox,
+    )
 
     loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
     city = (loc_in.get("city") or item.get("location_city") or "").strip() or "—"
@@ -117,6 +164,8 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     seller_username = item.get("seller_username")
     external_seller = SimpleNamespace(username=seller_username) if seller_username else None
 
+    mileage = mileage_for_flip
+
     listing_ends_at = item.get("listing_ends_at")
     bid_count = item.get("bid_count")
     try:
@@ -137,9 +186,9 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
         price=price,
         repair_cost=repair,
         resale_value=resale,
-        mileage=item.get("mileage"),
-        condition=(item.get("condition") or "Used").strip(),
-        vehicle_title=(item.get("vehicle_title") or "Not Specified").strip(),
+        mileage=mileage,
+        condition=condition,
+        vehicle_title=vehicle_title,
         image_url=image_url,
         source="ebay",
         external_listing_id=ext_id,
@@ -162,12 +211,12 @@ def fetch_ebay_inventory_views(query: str | None = None, *, limit: int = 50) -> 
         q = _default_ebay_query()
 
     try:
-        search_limit = max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "24")), 50))
+        search_limit = max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "50")), 50))
     except ValueError:
-        search_limit = 24
+        search_limit = 50
 
     cat = (os.getenv("EBAY_CATEGORY_IDS") or "6001").strip()
-    cache_key = f"{q.lower()}|cat={cat}"
+    cache_key = f"{q.lower()}|cat={cat}|flip=heuristic"
     now = time.time()
     cached = _ebay_cache.get(cache_key)
     if cached and cached[0] > now:
@@ -183,6 +232,13 @@ def fetch_ebay_inventory_views(query: str | None = None, *, limit: int = 50) -> 
         view = ebay_listing_dict_to_car_view(item, idx)
         if view is not None:
             views.append(view)
+
+    logger.info(
+        "eBay inventory query=%r: %d API hits -> %d vehicle listings",
+        q,
+        len(raw),
+        len(views),
+    )
 
     if views:
         _ebay_cache[cache_key] = (now + _CACHE_TTL_SEC, views)

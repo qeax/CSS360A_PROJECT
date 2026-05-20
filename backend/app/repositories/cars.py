@@ -4,6 +4,7 @@ import difflib
 import logging
 import re
 import unicodedata
+from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -15,7 +16,9 @@ from app.integrations.ebay.client import get_ebay_client
 from app.integrations.ebay.inventory import (
     fetch_ebay_inventory_views,
     invalidate_ebay_inventory_cache,
+    resolve_listing_url,
 )
+from app.integrations.ebay.parse_item import is_plausible_odometer
 from app.models.car import Car
 from app.services.body_style import (
     extract_body_style_from_aspects_json,
@@ -26,7 +29,89 @@ from app.services.geo import haversine_km, latlng_pair
 
 _in_memory_demo_cache: list[Any] | None = None
 
+# Used-car slider defaults when listings omit mileage (matches demo_seed.py span).
+_MILEAGE_BOUNDS_DEFAULT_MIN = 8000
+_MILEAGE_BOUNDS_DEFAULT_MAX = 145000
+_YEAR_SLIDER_MIN = 2000
+_YEAR_SLIDER_MAX = 2025
+_PRICE_SLIDER_MIN = 0.0
+
+
+def _year_slider_bounds() -> tuple[int, int]:
+    return _YEAR_SLIDER_MIN, _YEAR_SLIDER_MAX
+
+
 logger = logging.getLogger(__name__)
+
+
+def _effective_mileage(car: Any) -> int:
+    """Mileage used for filtering when listing data has no odometer."""
+    mm = getattr(car, "mileage", None)
+    if mm is not None:
+        mi = int(mm)
+        if is_plausible_odometer(mi):
+            return mi
+    car_id = getattr(car, "id", None) or 1
+    return 75000 + (int(car_id) * 1500) % 90000
+
+
+def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]:
+    """Wide price/mileage spans for filter sliders; year range is fixed (_year_slider_bounds)."""
+    demo = list(_get_cached_in_memory_cars())
+    if not demo:
+        return (_PRICE_SLIDER_MIN, 42500.0), (
+            _MILEAGE_BOUNDS_DEFAULT_MIN,
+            _MILEAGE_BOUNDS_DEFAULT_MAX,
+        )
+    prices = [float(c.price) for c in demo]
+    mileages = [int(c.mileage) for c in demo if getattr(c, "mileage", None) is not None]
+    price_bounds = (_PRICE_SLIDER_MIN, max(prices))
+    if mileages:
+        mileage_bounds = (min(mileages), max(mileages))
+    else:
+        mileage_bounds = (_MILEAGE_BOUNDS_DEFAULT_MIN, _MILEAGE_BOUNDS_DEFAULT_MAX)
+    return price_bounds, mileage_bounds
+
+
+def _resolve_mileage_meta_bounds(cars: list, *, inventory_source: str) -> tuple[int, int]:
+    """Min/max mileage for filter sliders (real values, else demo catalog span)."""
+    if inventory_source == "ebay":
+        return _demo_catalog_slider_bounds()[1]
+    values: list[int] = []
+    for car in cars:
+        mm = getattr(car, "mileage", None)
+        if mm is None:
+            continue
+        mi = int(mm)
+        if is_plausible_odometer(mi):
+            values.append(mi)
+    if len(values) >= 2 and max(values) > min(values):
+        return min(values), max(values)
+    return (_MILEAGE_BOUNDS_DEFAULT_MIN, _MILEAGE_BOUNDS_DEFAULT_MAX)
+
+
+_US_COUNTRY_ALIASES = frozenset({"united states", "us", "usa", "u.s.", "u.s.a."})
+
+
+def _normalize_country_key(value: str) -> str:
+    v = (value or "").strip().lower()
+    if v in _US_COUNTRY_ALIASES:
+        return "united states"
+    return v
+
+
+def _listing_ends_at_iso(value: Any) -> str | None:
+    """Normalize listing end time for API JSON (DB rows use datetime; eBay uses ISO strings)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    iso = getattr(value, "isoformat", None)
+    if callable(iso):
+        return iso()
+    return str(value)
 
 
 def invalidate_in_memory_demo_cache() -> None:
@@ -322,9 +407,7 @@ def apply_filters(
         if max_year and car.year > max_year:
             continue
 
-        mi = car.mileage
-        if mi is None:
-            mi = 75000 + (car.id * 1500) % 90000
+        mi = _effective_mileage(car)
         if min_mileage is not None and mi < min_mileage:
             continue
         if max_mileage is not None and mi > max_mileage:
@@ -344,8 +427,9 @@ def apply_filters(
 
         loc = car.location
         if countries_l:
-            cc = (loc.country or "").strip().lower() if loc else ""
-            if cc not in countries_l:
+            cc = _normalize_country_key((loc.country or "") if loc else "")
+            allowed_countries = {_normalize_country_key(c) for c in countries_l}
+            if cc not in allowed_countries:
                 continue
         if regions_l:
             rr = (loc.region or "").strip().lower() if loc else ""
@@ -414,9 +498,7 @@ def apply_filters(
         if es is not None:
             seller_username = es.username
 
-        listing_ends_at = None
-        if car.listing_ends_at is not None:
-            listing_ends_at = car.listing_ends_at.isoformat()
+        listing_ends_at = _listing_ends_at_iso(car.listing_ends_at)
 
         city_s = (loc.city or "") if loc else ""
         region_s = (loc.region or "") if loc else ""
@@ -438,12 +520,19 @@ def apply_filters(
             body_style=body_style,
             vehicle_title=vt,
             drive_type=drive_type,
-            description_summary=car.description_summary or "",
+            description_summary=(getattr(car, "description_summary", None) or ""),
             tokens=q_toks,
         ):
             continue
 
         image_urls = _image_urls_for_car(car)
+        src = (car.source or "manual").strip().lower()
+        ebay_sandbox = get_ebay_client().sandbox if src == "ebay" else False
+        listing_url_out = resolve_listing_url(
+            getattr(car, "external_listing_id", None),
+            getattr(car, "listing_url", None),
+            sandbox=ebay_sandbox,
+        )
         results.append(
             {
                 "id": car.id,
@@ -462,12 +551,12 @@ def apply_filters(
                 "drive_type": drive_type,
                 "source": car.source or "manual",
                 "external_listing_id": car.external_listing_id,
-                "listing_url": car.listing_url,
+                "listing_url": listing_url_out,
                 "listing_ends_at": listing_ends_at,
                 "bid_count": car.bid_count,
                 "listing_format": _normalize_listing_format(car.listing_format)
                 or car.listing_format,
-                "description_summary": car.description_summary,
+                "description_summary": getattr(car, "description_summary", None),
                 "seller_username": seller_username,
                 "location": location_out,
                 "delivery": delivery,
@@ -479,25 +568,33 @@ def apply_filters(
 
 def compute_inventory_meta(db: Session) -> dict[str, Any]:
     """Aggregate bounds and location hierarchy for filter UI (no auth logic here)."""
-    # Do not call eBay on /cars/meta — it doubles latency and skews slider ranges.
+    inventory_source = "empty"
     if _stored_cars_exist(db):
+        inventory_source = "database"
         cars = _cars_for_inventory(db, inventory_query=None)
-    elif get_ebay_client().is_configured() and not in_memory_demo_enabled():
-        # Slider bounds only — do not call eBay on /meta
-        cars = list(_get_cached_in_memory_cars())
+    elif get_ebay_client().is_configured():
+        inventory_source = "ebay"
+        cars = fetch_ebay_inventory_views(None)
+        if not cars and in_memory_demo_enabled():
+            inventory_source = "demo"
+            cars = list(_get_cached_in_memory_cars())
     elif in_memory_demo_enabled():
+        inventory_source = "demo"
         cars = list(_get_cached_in_memory_cars())
     else:
         cars = []
 
     if not cars:
+        (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
+        year_lo, year_hi = _year_slider_bounds()
         return {
-            "min_price": 0.0,
-            "max_price": 0.0,
-            "min_year": 0,
-            "max_year": 0,
-            "min_mileage": 0,
-            "max_mileage": 0,
+            "inventory_source": inventory_source,
+            "min_price": price_lo,
+            "max_price": price_hi,
+            "min_year": year_lo,
+            "max_year": year_hi,
+            "min_mileage": mi_lo,
+            "max_mileage": mi_hi,
             "countries": [],
             "regions_by_country": {},
             "cities_by_region": {},
@@ -509,9 +606,14 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
             "vehicle_titles": [],
         }
 
-    prices = [c.price for c in cars]
-    years = [c.year for c in cars]
-    mileages: list[int] = []
+    year_lo, year_hi = _year_slider_bounds()
+    if inventory_source == "ebay":
+        (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
+    else:
+        prices = [float(c.price) for c in cars]
+        price_lo, price_hi = _PRICE_SLIDER_MIN, max(prices)
+        mi_lo, mi_hi = _resolve_mileage_meta_bounds(cars, inventory_source=inventory_source)
+
     conditions_set: set[str] = set()
     body_styles_set: set[str] = set()
     formats_set: set[str] = set()
@@ -524,9 +626,6 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
 
     for car in cars:
         makes_set.add(car.brand.strip())
-        mm = car.mileage
-        if mm is not None:
-            mileages.append(int(mm))
         if car.condition and str(car.condition).strip():
             conditions_set.add(str(car.condition).strip())
         bs = _body_style_for_car(car)
@@ -568,16 +667,14 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
                 },
             )
 
-    min_mi = int(min(mileages)) if mileages else 0
-    max_mi = int(max(mileages)) if mileages else 0
-
     return {
-        "min_price": float(min(prices)),
-        "max_price": float(max(prices)),
-        "min_year": int(min(years)),
-        "max_year": int(max(years)),
-        "min_mileage": min_mi,
-        "max_mileage": max_mi,
+        "inventory_source": inventory_source,
+        "min_price": float(price_lo),
+        "max_price": float(price_hi),
+        "min_year": int(year_lo),
+        "max_year": int(year_hi),
+        "min_mileage": int(mi_lo),
+        "max_mileage": int(mi_hi),
         "countries": sorted(countries, key=str.lower),
         "regions_by_country": {
             k: sorted(v, key=str.lower) for k, v in sorted(regions_by_country.items())

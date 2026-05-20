@@ -620,8 +620,12 @@ function populateMetaIntoUi(meta) {
     const mmin = document.getElementById('filterMileageMin');
     const mmax = document.getElementById('filterMileageMax');
     if (pmin && pmax) {
-        const lo = Math.floor(meta.min_price / 100) * 100;
-        const hi = Math.ceil(meta.max_price / 100) * 100;
+        let lo = Math.floor(meta.min_price / 100) * 100;
+        let hi = Math.ceil(meta.max_price / 100) * 100;
+        if (hi <= lo) {
+            lo = 0;
+            hi = 42500;
+        }
         [pmin, pmax].forEach((el) => {
             el.min = String(lo);
             el.max = String(hi);
@@ -631,17 +635,27 @@ function populateMetaIntoUi(meta) {
         updateDualRangeLabels('price', lo, hi);
     }
     if (ymin && ymax) {
-        ymin.min = String(meta.min_year);
-        ymin.max = String(meta.max_year);
-        ymax.min = String(meta.min_year);
-        ymax.max = String(meta.max_year);
-        ymin.value = String(meta.min_year);
-        ymax.value = String(meta.max_year);
-        updateDualRangeLabels('year', meta.min_year, meta.max_year);
+        let yLo = Number(meta.min_year);
+        let yHi = Number(meta.max_year);
+        if (yHi <= yLo) {
+            yLo = 2000;
+            yHi = 2025;
+        }
+        ymin.min = String(yLo);
+        ymin.max = String(yHi);
+        ymax.min = String(yLo);
+        ymax.max = String(yHi);
+        ymin.value = String(yLo);
+        ymax.value = String(yHi);
+        updateDualRangeLabels('year', yLo, yHi);
     }
     if (mmin && mmax && meta.min_mileage != null && meta.max_mileage != null) {
-        const lo = Number(meta.min_mileage);
-        const hi = Number(meta.max_mileage);
+        let lo = Number(meta.min_mileage);
+        let hi = Number(meta.max_mileage);
+        if (hi <= lo) {
+            lo = 8000;
+            hi = 145000;
+        }
         const step = 500;
         const loR = Math.floor(lo / step) * step;
         const hiR = Math.ceil(hi / step) * step;
@@ -842,23 +856,26 @@ async function executeSearch({ append = false } = {}) {
 
     const pmin = Number(document.getElementById('filterPriceMin')?.value);
     const pmax = Number(document.getElementById('filterPriceMax')?.value);
-    if (inventoryMeta) {
-        if (pmin > inventoryMeta.min_price) query.searchParams.set('min_price', String(pmin));
-        if (pmax < inventoryMeta.max_price) query.searchParams.set('max_price', String(pmax));
+    const priceBounds = priceRangeBounds();
+    if (priceBounds.active) {
+        if (pmin > priceBounds.lo) query.searchParams.set('min_price', String(pmin));
+        if (pmax < priceBounds.hi) query.searchParams.set('max_price', String(pmax));
     }
 
     const ymin = Number(document.getElementById('filterYearMin')?.value);
     const ymax = Number(document.getElementById('filterYearMax')?.value);
-    if (inventoryMeta) {
-        if (ymin > inventoryMeta.min_year) query.searchParams.set('min_year', String(ymin));
-        if (ymax < inventoryMeta.max_year) query.searchParams.set('max_year', String(ymax));
+    const yearBounds = yearRangeBounds();
+    if (yearBounds.active) {
+        if (ymin > yearBounds.lo) query.searchParams.set('min_year', String(ymin));
+        if (ymax < yearBounds.hi) query.searchParams.set('max_year', String(ymax));
     }
 
     const mmin = Number(document.getElementById('filterMileageMin')?.value);
     const mmax = Number(document.getElementById('filterMileageMax')?.value);
-    if (inventoryMeta && inventoryMeta.min_mileage != null && inventoryMeta.max_mileage != null) {
-        if (mmin > inventoryMeta.min_mileage) query.searchParams.set('min_mileage', String(Math.round(mmin)));
-        if (mmax < inventoryMeta.max_mileage) query.searchParams.set('max_mileage', String(Math.round(mmax)));
+    const mileageBounds = mileageRangeBounds();
+    if (mileageBounds.active) {
+        if (mmin > mileageBounds.lo) query.searchParams.set('min_mileage', String(Math.round(mmin)));
+        if (mmax < mileageBounds.hi) query.searchParams.set('max_mileage', String(Math.round(mmax)));
     }
 
     appendMultiParams(query, 'body_styles', getSelectedChipValues('filterBodyTypes'));
@@ -968,6 +985,69 @@ function locationLine(car) {
     return filtered.length ? `Location: ${filtered.join(', ')}` : 'Location: —';
 }
 
+function listingLinkLabel(car) {
+    const src = (car.source || '').toLowerCase();
+    if (src === 'ebay') return 'View on eBay';
+    if (src === 'demo') return 'View listing';
+    return 'View listing';
+}
+
+function getListingUrl(car) {
+    const direct = (car.listing_url || '').trim();
+    if (direct.startsWith('http://') || direct.startsWith('https://')) {
+        return direct;
+    }
+    const ext = (car.external_listing_id || '').trim();
+    if (!ext) return '';
+    const parts = ext.split('|');
+    let numeric = '';
+    if (parts.length >= 2 && /^\d+$/.test(parts[1])) {
+        numeric = parts[1];
+    } else if (/^\d+$/.test(ext)) {
+        numeric = ext;
+    }
+    return numeric ? `https://www.ebay.com/itm/${numeric}` : '';
+}
+
+function listingLinkHtml(car, className = 'car-card-listing-link') {
+    const url = getListingUrl(car);
+    if (!url) return '';
+    return `<a class="${className}" href="${attrEncode(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(listingLinkLabel(car))}</a>`;
+}
+
+function priceRangeBounds() {
+    if (!inventoryMeta || inventoryMeta.max_price <= inventoryMeta.min_price) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    const lo = Math.floor(inventoryMeta.min_price / 100) * 100;
+    const hi = Math.ceil(inventoryMeta.max_price / 100) * 100;
+    return { lo, hi, active: true };
+}
+
+function yearRangeBounds() {
+    if (!inventoryMeta || inventoryMeta.max_year <= inventoryMeta.min_year) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    return { lo: inventoryMeta.min_year, hi: inventoryMeta.max_year, active: true };
+}
+
+function mileageRangeBounds() {
+    if (
+        !inventoryMeta ||
+        inventoryMeta.min_mileage == null ||
+        inventoryMeta.max_mileage == null ||
+        inventoryMeta.max_mileage <= inventoryMeta.min_mileage
+    ) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    const step = 500;
+    return {
+        lo: Math.floor(Number(inventoryMeta.min_mileage) / step) * step,
+        hi: Math.ceil(Number(inventoryMeta.max_mileage) / step) * step,
+        active: true,
+    };
+}
+
 function specLines(car) {
     const body = car.body_style || '—';
     const drive = car.drive_type || '—';
@@ -991,6 +1071,7 @@ function updateUI(items) {
         .map((car) => {
             const metricsStyle = metricsBlockHeatStyle(car.roi);
             const profitCls = profitValueClass(car.net_profit);
+            const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
             return `
             <article class="car-card" data-car-id="${car.id}">
                 <div class="car-card-media">
@@ -1011,10 +1092,13 @@ function updateUI(items) {
                     <div class="car-card-specs">${specLines(car)}</div>
                     <div class="car-card-divider" aria-hidden="true"></div>
                     <div class="car-card-footer">
-                        ${priceBlockHtml(car)}
+                        <div class="car-card-footer-start">
+                            ${priceBlockHtml(car)}
+                            ${listingLinkHtml(car, 'car-card-listing-link car-card-listing-link--footer')}
+                        </div>
                         <div class="car-card-metrics-compact" style="${metricsStyle}">
                             <div class="car-card-metrics-col car-card-metrics-col--roi">
-                                <span class="car-card-metrics-col-label">ROI</span>
+                                <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
                                 <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${Number(car.roi).toFixed(1)}%</span>
                             </div>
                             <span class="car-card-metrics-divider" aria-hidden="true"></span>
@@ -1031,7 +1115,7 @@ function updateUI(items) {
 
     list.querySelectorAll('.car-card').forEach((card) => {
         card.addEventListener('click', (e) => {
-            if (e.target.closest('.car-card-carousel-nav, .car-card-carousel-dot')) {
+            if (e.target.closest('.car-card-carousel-nav, .car-card-carousel-dot, .car-card-listing-link')) {
                 return;
             }
             const carId = Number(card.dataset.carId);
@@ -1103,6 +1187,7 @@ function showCarDetails(car) {
                     <div style="font-size:24px;font-weight:700;color:${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">${car.roi}%</div>
                 </div>
             </div>
+            ${listingLinkHtml(car, 'modal-listing-link')}
         </div>`;
 
     modal.classList.add('active');
@@ -1212,7 +1297,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const meta = await fetchMeta();
     if (meta) populateMetaIntoUi(meta);
-    applyLocationSingletonDefaults({ onlyIfEmpty: true });
+    const skipAutoCountry = meta && meta.inventory_source === 'ebay';
+    if (!skipAutoCountry) {
+        applyLocationSingletonDefaults({ onlyIfEmpty: true });
+    }
     refreshRegionOptions();
     refreshCityOptions();
     updateRadiusAvailability();
