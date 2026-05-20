@@ -41,12 +41,19 @@
             </button>
             <div class="app-account" id="appAccountWrap">
                 <button type="button" class="app-account-trigger" id="accountMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="accountMenu">
-                    <span class="app-account-avatar" aria-hidden="true"></span>
-                    <span class="app-account-email" id="accountEmailLabel">Account</span>
+                    <span class="app-account-avatar-wrap">
+                        <img class="app-account-avatar" id="accountAvatarImg" alt="" width="28" height="28" hidden>
+                        <span class="app-account-avatar app-account-avatar--fallback" id="accountAvatarFallback" aria-hidden="true"></span>
+                    </span>
+                    <span class="app-account-label">
+                        <span class="app-account-name" id="accountDisplayName">Account</span>
+                        <span class="app-account-email" id="accountEmailLabel"></span>
+                    </span>
                     <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 4l4 4 4-4z"/></svg>
                 </button>
                 <div class="app-account-menu" id="accountMenu" role="menu" hidden>
-                    <a class="app-account-menu-item" role="menuitem" href="/api/auth/logout">Log out</a>
+                    <a class="app-account-menu-item" role="menuitem" href="profile.html">Profile</a>
+                    <a class="app-account-menu-item app-account-menu-item--logout" role="menuitem" href="/api/auth/logout">Log out</a>
                 </div>
             </div>
         </div>
@@ -224,6 +231,7 @@
         </div>
     </div>
 
+    <script src="app-shell.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

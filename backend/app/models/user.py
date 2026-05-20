@@ -10,6 +10,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     email = Column(String(320), nullable=False, unique=True, index=True)
     azure_oid = Column(String(255), nullable=False, unique=True, index=True)
+    display_name = Column(String(255), nullable=True)
+    profile_picture_url = Column(Text, nullable=True)
 
     account_status = Column(String(32), nullable=False, server_default=text("'active'"))
     restricted_until = Column(DateTime(timezone=True), nullable=True)
