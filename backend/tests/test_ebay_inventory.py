@@ -206,6 +206,7 @@ def test_listing_ends_at_iso_accepts_string_and_datetime():
 def test_apply_filters_handles_ebay_string_listing_ends_at():
     """eBay in-memory cars store listing_ends_at as ISO str, not datetime."""
     car = SimpleNamespace(
+        id=1,
         brand="Toyota",
         model="Camry",
         year=2019,
@@ -234,6 +235,8 @@ def test_apply_filters_handles_ebay_string_listing_ends_at():
         media=[],
         description_summary="2019 Toyota Camry",
         source="ebay",
+        external_listing_id="v1|99|0",
+        bid_count=0,
     )
     out = apply_filters(
         [car],
