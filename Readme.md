@@ -133,7 +133,12 @@ docker compose exec backend python -m app.purge_inventory
 
 One-time on container start: `PURGE_INVENTORY_ON_START=true` in `.env`.
 
-If eBay credentials are unset, an empty `cars` table still serves the **demo catalog** (`DEMO_IN_MEMORY_WHEN_EMPTY`).
+| `INVENTORY_MODE` | `auto` (default), `ebay_only` (no demo fallback), `demo_only` |
+| `DEMO_IN_MEMORY_WHEN_EMPTY` | In `auto` mode: demo when DB empty and eBay empty/unconfigured |
+
+`SEED_ON_START=false` only skips writing demo rows **into MySQL**. The UI can still show **in-memory** demo unless `INVENTORY_MODE=ebay_only` (or `DEMO_IN_MEMORY_WHEN_EMPTY=false` in `auto` mode).
+
+Debug after deploy: `GET /api/ebay/health` → `configured`, `inventory_mode`, `in_memory_demo_enabled`.
 
 Use placeholders in docs and examples: `<your-domain>`, `<tenant-id>`, `<secret>`.
 
@@ -148,7 +153,8 @@ Workflow [`.github/workflows/cd.yml`](.github/workflows/cd.yml) deploys on push 
 | `DB_*`, `MYSQL_ROOT_PASSWORD` | Database |
 | `SEED_ON_START`, `PURGE_DEMO_ON_START` | Seed / purge on deploy |
 | `AZURE_AD_*`, `AUTH_SESSION_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `CORS_ORIGINS` | SSO and CORS |
-| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX`, `EBAY_DEFAULT_QUERY` | eBay Browse API (optional) |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX`, `EBAY_DEFAULT_QUERY`, `EBAY_CATEGORY_IDS`, … | eBay Browse API (optional) |
+| `INVENTORY_MODE`, `DEMO_IN_MEMORY_WHEN_EMPTY` | `ebay_only` + `false` to test eBay without demo |
 
 ### Public repository safety
 
