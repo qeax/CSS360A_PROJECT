@@ -2,7 +2,10 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.config import get_inventory_mode, in_memory_demo_enabled
+from app.db import SessionLocal
 from app.integrations.ebay.client import get_ebay_client
+from app.repositories.cars import _stored_cars_exist
 
 router = APIRouter(prefix="/ebay", tags=["eBay"])
 
@@ -29,11 +32,17 @@ async def search_ebay_cars(
 
 @router.get("/health")
 async def health_check():
-    """Check eBay API configuration status."""
+    """Check eBay API configuration and inventory mode (debug deploy issues)."""
     client = get_ebay_client()
+    db_has_cars = False
+    with SessionLocal() as db:
+        db_has_cars = _stored_cars_exist(db)
     return {
         "service": "eBay API",
         "configured": client.is_configured(),
         "sandbox": client.sandbox,
         "base_url": client.base_url,
+        "inventory_mode": get_inventory_mode(),
+        "in_memory_demo_enabled": in_memory_demo_enabled(),
+        "database_has_cars": db_has_cars,
     }

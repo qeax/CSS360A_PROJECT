@@ -66,6 +66,28 @@ def get_allowed_email_domain() -> Optional[str]:
     return raw.strip().lower() if raw else None
 
 
+def get_inventory_mode() -> str:
+    """
+    Inventory source when the ``cars`` table is empty.
+
+    - ``auto`` (default): eBay if configured, else in-memory demo when allowed
+    - ``ebay_only``: never show in-memory demo (empty list if eBay fails)
+    - ``demo_only``: always in-memory demo (ignore eBay)
+    """
+    return os.getenv("INVENTORY_MODE", "auto").strip().lower()
+
+
+def in_memory_demo_enabled() -> bool:
+    """Whether the generated demo catalog may be used for listing or filter UI."""
+    mode = get_inventory_mode()
+    if mode in ("ebay_only", "ebay"):
+        return False
+    if mode in ("demo_only", "demo"):
+        return True
+    raw = os.getenv("DEMO_IN_MEMORY_WHEN_EMPTY", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def require_auth_env_at_startup() -> None:
     """Fail fast in production if SSO secrets are missing."""
     if is_production() and is_dev_auth_bypass_enabled():

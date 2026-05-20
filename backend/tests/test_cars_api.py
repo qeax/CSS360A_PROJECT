@@ -164,6 +164,8 @@ def test_demo_auction_listing_has_bids_and_end_time(client):
 
 
 def test_cars_uses_demo_when_ebay_not_configured(client, monkeypatch):
+    monkeypatch.setenv("INVENTORY_MODE", "auto")
+    monkeypatch.setenv("DEMO_IN_MEMORY_WHEN_EMPTY", "true")
     monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
     monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
     reset_ebay_client()
@@ -173,6 +175,19 @@ def test_cars_uses_demo_when_ebay_not_configured(client, monkeypatch):
     data = response.json()
     assert data["total"] >= 1
     assert any((i.get("source") or "") == "demo" for i in data["items"])
+
+
+def test_cars_empty_when_ebay_only_and_no_credentials(client, monkeypatch):
+    monkeypatch.setenv("INVENTORY_MODE", "ebay_only")
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    reset_ebay_client()
+    invalidate_in_memory_demo_cache()
+    response = client.get("/cars", params={"limit": 5})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 0
+    assert data["items"] == []
 
 
 def test_cars_q_soft_partial_brand_model(client):
