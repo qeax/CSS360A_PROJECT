@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import difflib
 import logging
-import os
 import re
 import unicodedata
 from typing import Any, Optional
@@ -10,6 +9,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.config import in_memory_demo_enabled
 from app.demo_seed import build_in_memory_demo_car_views, pick_media_urls_for_car
 from app.integrations.ebay.client import get_ebay_client
 from app.integrations.ebay.inventory import (
@@ -36,11 +36,6 @@ def invalidate_in_memory_demo_cache() -> None:
     invalidate_ebay_inventory_cache()
 
 
-def _demo_in_memory_when_empty() -> bool:
-    v = os.environ.get("DEMO_IN_MEMORY_WHEN_EMPTY", "true").strip().lower()
-    return v not in ("0", "false", "no", "off")
-
-
 def _stored_cars_exist(db: Session) -> bool:
     return db.execute(select(Car.id).limit(1)).first() is not None
 
@@ -57,9 +52,10 @@ def _ebay_inventory_for_query(query: str | None) -> list[Any]:
     views = fetch_ebay_inventory_views(query)
     if views:
         return views
-    if _demo_in_memory_when_empty():
+    if in_memory_demo_enabled():
         logger.info("eBay unavailable or empty; falling back to demo catalog")
         return list(_get_cached_in_memory_cars())
+    logger.warning("eBay returned no vehicle listings (demo disabled); inventory will be empty")
     return []
 
 
@@ -78,8 +74,11 @@ def _cars_for_inventory(db: Session, *, inventory_query: str | None = None) -> l
         ).all()
     if get_ebay_client().is_configured():
         return _ebay_inventory_for_query(inventory_query)
-    if _demo_in_memory_when_empty():
+    if in_memory_demo_enabled():
+        if not get_ebay_client().is_configured():
+            logger.warning("eBay credentials missing; serving in-memory demo catalog")
         return list(_get_cached_in_memory_cars())
+    logger.warning("eBay not configured and demo disabled; inventory empty")
     return []
 
 
@@ -483,10 +482,13 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
     # Do not call eBay on /cars/meta — it doubles latency and skews slider ranges.
     if _stored_cars_exist(db):
         cars = _cars_for_inventory(db, inventory_query=None)
-    elif get_ebay_client().is_configured():
+    elif get_ebay_client().is_configured() and not in_memory_demo_enabled():
+        # Slider bounds only — do not call eBay on /meta
+        cars = list(_get_cached_in_memory_cars())
+    elif in_memory_demo_enabled():
         cars = list(_get_cached_in_memory_cars())
     else:
-        cars = _cars_for_inventory(db, inventory_query=None)
+        cars = []
 
     if not cars:
         return {

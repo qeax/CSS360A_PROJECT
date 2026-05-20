@@ -11,6 +11,8 @@ services:
         environment:
             SEED_ON_START: ${SEED_ON_START:-false}
             PURGE_DEMO_ON_START: ${PURGE_DEMO_ON_START:-false}
+            INVENTORY_MODE: ${INVENTORY_MODE:-ebay_only}
+            DEMO_IN_MEMORY_WHEN_EMPTY: ${DEMO_IN_MEMORY_WHEN_EMPTY:-false}
             EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
             EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
             EBAY_SANDBOX: ${EBAY_SANDBOX:-true}
