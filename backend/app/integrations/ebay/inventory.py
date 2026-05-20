@@ -6,11 +6,19 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
-from app.integrations.ebay.client import get_ebay_client
+from app.integrations.ebay.client import (
+    _ebay_category_ids,
+    _ebay_search_limit,
+    _ebay_search_pages,
+    ebay_fetch_cap,
+    get_ebay_client,
+)
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
+from app.services.flip import estimate_flip_economics
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +67,6 @@ def _parse_brand_model(
     return "eBay", t[:128]
 
 
-def _flip_estimates(price: float) -> tuple[float, float]:
-    repair = round(price * 0.08, 2)
-    resale = round(price * 1.12, 2)
-    return repair, resale
-
-
 def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNamespace | None:
     """Map normalized eBay row (search + optional getItem) to a demo-compatible car view."""
     if item.get("error"):
@@ -81,8 +83,36 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
 
     brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
     year = _parse_year(title, item.get("year"))
-    repair, resale = _flip_estimates(price)
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
+    year_econ: int | None = None
+    if item.get("year") is not None:
+        try:
+            year_econ = int(item.get("year"))
+        except (TypeError, ValueError):
+            year_econ = None
+    mileage_raw = item.get("mileage")
+    mileage: int | None = None
+    if mileage_raw is not None:
+        try:
+            mileage = int(mileage_raw)
+        except (TypeError, ValueError):
+            mileage = None
+    cond_raw = item.get("condition")
+    condition = (str(cond_raw).strip() if cond_raw is not None else None) or None
+    vtitle_raw = item.get("vehicle_title")
+    vehicle_title = (str(vtitle_raw).strip() if vtitle_raw is not None else None) or None
+    econ = estimate_flip_economics(
+        price,
+        year=year_econ,
+        mileage=mileage,
+        condition=condition,
+        vehicle_title=vehicle_title,
+        listing_format=item.get("listing_format") or "BUY_IT_NOW",
+        listing_id=ext_id,
+        title_text=title,
+    )
+    repair = econ["repair_cost"]
+    resale = econ["resale_value"]
     listing_url = item.get("listing_url") or f"https://www.ebay.com/itm/{ext_id}"
 
     loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
@@ -117,7 +147,15 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     seller_username = item.get("seller_username")
     external_seller = SimpleNamespace(username=seller_username) if seller_username else None
 
-    listing_ends_at = item.get("listing_ends_at")
+    listing_ends_at_raw = item.get("listing_ends_at")
+    listing_ends_at = None
+    if isinstance(listing_ends_at_raw, datetime):
+        listing_ends_at = listing_ends_at_raw
+    elif isinstance(listing_ends_at_raw, str) and listing_ends_at_raw.strip():
+        try:
+            listing_ends_at = datetime.fromisoformat(listing_ends_at_raw.replace("Z", "+00:00"))
+        except ValueError:
+            listing_ends_at = None
     bid_count = item.get("bid_count")
     try:
         bid_count = int(bid_count) if bid_count is not None else None
@@ -161,19 +199,15 @@ def fetch_ebay_inventory_views(query: str | None = None, *, limit: int = 50) -> 
     if len(q) < 3:
         q = _default_ebay_query()
 
-    try:
-        search_limit = max(1, min(int(os.getenv("EBAY_SEARCH_LIMIT", "24")), 50))
-    except ValueError:
-        search_limit = 24
-
+    fetch_cap = ebay_fetch_cap()
     cat = (os.getenv("EBAY_CATEGORY_IDS") or "6001").strip()
-    cache_key = f"{q.lower()}|cat={cat}"
+    cache_key = f"{q.lower()}|cat={cat}|lim={_ebay_search_limit()}|p={_ebay_search_pages()}"
     now = time.time()
     cached = _ebay_cache.get(cache_key)
     if cached and cached[0] > now:
         return list(cached[1])
 
-    raw = client.search_listings_enriched(query=q, limit=min(limit, search_limit))
+    raw = client.search_listings_enriched(query=q, limit=min(limit, fetch_cap))
     views: list[Any] = []
     idx = 0
     for item in raw:
@@ -184,8 +218,87 @@ def fetch_ebay_inventory_views(query: str | None = None, *, limit: int = 50) -> 
         if view is not None:
             views.append(view)
 
+    logger.info(
+        "eBay fetch query=%r category=%r raw=%d kept=%d",
+        q,
+        cat or "(none)",
+        len(raw),
+        len(views),
+    )
     if views:
         _ebay_cache[cache_key] = (now + _CACHE_TTL_SEC, views)
     else:
-        logger.warning("eBay inventory fetch returned no listings for query=%r", q)
+        logger.warning(
+            "eBay inventory fetch returned no usable listings for query=%r "
+            "(raw=%d after sandbox/category settings)",
+            q,
+            len(raw),
+        )
     return views
+
+
+def probe_ebay_search(query: str | None = None, *, limit: int = 5) -> dict[str, Any]:
+    """Diagnostic call for /api/ebay/health — does not use cache or vehicle filter."""
+    client = get_ebay_client()
+    if not client.is_configured():
+        return {"configured": False, "raw_count": 0, "kept_count": 0, "sample": []}
+
+    cap = max(1, min(int(limit or 5), 10))
+    q = (query or _default_ebay_query()).strip() or _default_ebay_query()
+    cat = _ebay_category_ids()
+    attempts: list[dict[str, Any]] = []
+
+    for label, attempt_q, attempt_cat in (
+        ("category_and_query", q, cat),
+        ("category_only", None, cat),
+        ("query_no_category", q, None),
+        ("make_model_query", "Toyota Camry", cat),
+    ):
+        if not attempt_q and not attempt_cat:
+            continue
+        diag = client._search_request(
+            query=attempt_q,
+            limit=cap,
+            category_ids=attempt_cat,
+        )
+        rows = client._items_to_rows(diag.get("items") or [], cap)
+        attempts.append(
+            {
+                "label": label,
+                "query": attempt_q,
+                "category_ids": attempt_cat,
+                "http_status": diag.get("http_status"),
+                "api_total": diag.get("total"),
+                "raw_count": len(rows),
+                "error": diag.get("error"),
+                "filter": diag.get("filter"),
+                "sample_titles": [(r.get("title") or "")[:80] for r in rows[:3]],
+            }
+        )
+        if rows:
+            summaries = rows
+            break
+    else:
+        summaries = []
+
+    kept = [s for s in summaries if is_likely_vehicle_listing(s)]
+    sample = [
+        {
+            "title": (s.get("title") or "")[:140],
+            "price": s.get("price"),
+            "kept_by_filter": is_likely_vehicle_listing(s),
+        }
+        for s in summaries[:cap]
+    ]
+    return {
+        "configured": True,
+        "query": q,
+        "raw_count": len(summaries),
+        "kept_count": len(kept),
+        "sample": sample,
+        "attempts": attempts,
+        "hint": (
+            "Browse API returns only Buy-It-Now by default; we send "
+            "filter=buyingOptions:{AUCTION|FIXED_PRICE} for vehicle listings."
+        ),
+    }

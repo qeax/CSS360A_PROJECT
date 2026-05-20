@@ -18,8 +18,9 @@ services:
             EBAY_SANDBOX: ${EBAY_SANDBOX:-true}
             EBAY_DEFAULT_QUERY: ${EBAY_DEFAULT_QUERY:-car}
             EBAY_CATEGORY_IDS: ${EBAY_CATEGORY_IDS:-6001}
-            EBAY_SEARCH_LIMIT: ${EBAY_SEARCH_LIMIT:-24}
-            EBAY_GET_ITEM_MAX: ${EBAY_GET_ITEM_MAX:-10}
+            EBAY_SEARCH_LIMIT: ${EBAY_SEARCH_LIMIT:-50}
+            EBAY_SEARCH_PAGES: ${EBAY_SEARCH_PAGES:-2}
+            EBAY_GET_ITEM_MAX: ${EBAY_GET_ITEM_MAX:-12}
         networks:
             - css360_internal
             - proxy_network

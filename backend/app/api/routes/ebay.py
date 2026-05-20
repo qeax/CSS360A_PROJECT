@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.config import get_inventory_mode, in_memory_demo_enabled
 from app.db import SessionLocal
-from app.integrations.ebay.client import get_ebay_client
+from app.integrations.ebay.client import _ebay_category_ids, get_ebay_client
+from app.integrations.ebay.inventory import probe_ebay_search
 from app.repositories.cars import _stored_cars_exist
 
 router = APIRouter(prefix="/ebay", tags=["eBay"])
@@ -31,18 +32,29 @@ async def search_ebay_cars(
 
 
 @router.get("/health")
-async def health_check():
-    """Check eBay API configuration and inventory mode (debug deploy issues)."""
+async def health_check(
+    probe: bool = Query(False, description="Run a real eBay search and return counts"),
+    probe_query: str = Query("car", min_length=3, description="Query for probe"),
+):
+    """Check eBay configuration and (optionally) sample sandbox/prod response."""
     client = get_ebay_client()
     db_has_cars = False
     with SessionLocal() as db:
         db_has_cars = _stored_cars_exist(db)
-    return {
+    payload = {
         "service": "eBay API",
         "configured": client.is_configured(),
         "sandbox": client.sandbox,
+        "keys_look_sandbox": client._keys_look_sandbox,
+        "sandbox_env_matches_keys": client.sandbox == client._keys_look_sandbox,
         "base_url": client.base_url,
+        "category_ids_in_effect": _ebay_category_ids(),
         "inventory_mode": get_inventory_mode(),
         "in_memory_demo_enabled": in_memory_demo_enabled(),
         "database_has_cars": db_has_cars,
     }
+    if probe and client.is_configured():
+        payload["probe"] = probe_ebay_search(probe_query, limit=5)
+    if client.last_search_diagnostic:
+        payload["last_search"] = client.last_search_diagnostic
+    return payload

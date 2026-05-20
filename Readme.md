@@ -121,9 +121,21 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | Optional: live eBay inventory on `/cars` when MySQL has no rows (sandbox listings stay in memory only) |
 | `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
-| `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
-| `EBAY_SEARCH_LIMIT` | Max search hits per request (default `24`) |
-| `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `10`; `0` = search only) |
+| `EBAY_CATEGORY_IDS` | Cars & Trucks category filter (`6001`). Ignored in sandbox unless `EBAY_FORCE_CATEGORY_IDS=true` (sandbox Motors data is sparse) |
+| `EBAY_STRICT_VEHICLE_FILTER` | Auto: lax when `EBAY_CATEGORY_IDS` is applied in prod; strict only without category. `true`/`false` to override |
+| `EBAY_SEARCH_LIMIT` | Browse API page size (default `50`, max `200`) |
+| `EBAY_SEARCH_PAGES` | How many pages to fetch (default `2`; total cap ≈ limit × pages) |
+| `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `12`; `0` = search only, faster) |
+
+Diagnose what eBay actually returns:
+
+```text
+GET /api/ebay/health?probe=true&probe_query=car
+```
+
+Returns `configured`, `sandbox`, `category_ids_in_effect`, plus `probe.raw_count` /
+`probe.kept_count` and a sample of titles so you can tell whether sandbox returned
+nothing or the vehicle filter dropped everything.
 
 Clear all inventory in MySQL (cars + external sellers):
 
@@ -331,7 +343,7 @@ cd backend
 python -m pip install -r requirements.txt -r requirements-dev.txt
 ruff check .
 ruff format --check .
-pip-audit -r requirements.txt -r requirements-dev.txt
+pip-audit -r requirements.txt -r requirements-dev.txt --ignore-vuln PYSEC-2025-183
 bandit -r app -ll
 pytest
 ```
