@@ -97,3 +97,22 @@ def pick_email_claim(claims: dict[str, Any]) -> Optional[str]:
     if isinstance(email, str) and email.strip():
         return email.strip()
     return None
+
+
+def pick_display_name(claims: dict[str, Any]) -> Optional[str]:
+    name = claims.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    given = claims.get("given_name")
+    family = claims.get("family_name")
+    parts = [p.strip() for p in (given, family) if isinstance(p, str) and p.strip()]
+    if parts:
+        return " ".join(parts)
+    return None
+
+
+def pick_profile_picture_url(claims: dict[str, Any]) -> Optional[str]:
+    picture = claims.get("picture")
+    if isinstance(picture, str) and picture.strip():
+        return picture.strip()
+    return None
