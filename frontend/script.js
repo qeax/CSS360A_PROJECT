@@ -115,18 +115,6 @@ function toggleSortOrder() {
     executeSearch({ append: false });
 }
 
-function toggleTheme() {
-    document.body.classList.toggle('light-theme');
-    const isLight = document.body.classList.contains('light-theme');
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
-}
-
-function initTheme() {
-    if (localStorage.getItem('theme') === 'light') {
-        document.body.classList.add('light-theme');
-    }
-}
-
 function calculateHeatmap(roi, brightness = 42, saturation = 65) {
     const score = Math.min(Math.max(roi, 0), 30);
     const hue = (score / 30) * 120;
@@ -1216,30 +1204,12 @@ function resetFilters() {
     executeSearch({ append: false });
 }
 
-function initAccountMenu() {
-    const wrap = document.getElementById('appAccountWrap');
-    const btn = document.getElementById('accountMenuBtn');
-    const menu = document.getElementById('accountMenu');
-    if (!wrap || !btn || !menu) return;
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const open = menu.hidden;
-        menu.hidden = !open;
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    document.addEventListener('click', () => {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
-    });
-}
-
 function scheduleGlobalSearch() {
     clearTimeout(globalSearchTimer);
     globalSearchTimer = setTimeout(() => executeSearch({ append: false }), 380);
 }
 
 function initEventListeners() {
-    document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
     document.getElementById('applyFiltersBtn')?.addEventListener('click', () => executeSearch({ append: false }));
     document.getElementById('resetFiltersBtn')?.addEventListener('click', resetFilters);
     document.getElementById('loadMoreBtn')?.addEventListener('click', () => executeSearch({ append: true }));
@@ -1266,26 +1236,13 @@ function initEventListeners() {
         if (lab) lab.textContent = e.target.value;
     });
 
-    initAccountMenu();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.status === 401) {
-            window.location.replace('login.html');
-            return;
-        }
-        if (!res.ok) throw new Error('session_check_failed');
-        const me = await res.json();
-        const label = document.getElementById('accountEmailLabel');
-        if (label && me.email) label.textContent = me.email;
-    } catch {
-        window.location.replace('login.html');
-        return;
-    }
+    initAppShell();
+    const me = await requireAuth();
+    if (!me) return;
 
-    initTheme();
     initViewMode();
     initSortOrderUi();
     initFilterDropdowns();
