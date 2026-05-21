@@ -574,8 +574,9 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
         cars = _cars_for_inventory(db, inventory_query=None)
     elif get_ebay_client().is_configured():
         inventory_source = "ebay"
-        # Do not call eBay on /cars/meta — doubles latency; slider bounds use demo catalog.
-        cars = list(_get_cached_in_memory_cars()) if in_memory_demo_enabled() else []
+        # Filter UI only (countries/regions/cities + slider bounds): demo catalog, no live eBay call.
+        # INVENTORY_MODE=ebay_only hides demo from /cars but meta still needs location options.
+        cars = list(_get_cached_in_memory_cars())
     elif in_memory_demo_enabled():
         inventory_source = "demo"
         cars = list(_get_cached_in_memory_cars())
