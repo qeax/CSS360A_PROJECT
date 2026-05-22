@@ -33,6 +33,17 @@ function applyAvatarToSlot(imgEl, fallbackEl, displayName, pictureUrl) {
 
     const showImage = Boolean(pictureUrl);
     if (showImage) {
+        imgEl.onerror = () => {
+            imgEl.onerror = null;
+            imgEl.removeAttribute('src');
+            imgEl.hidden = true;
+            fallbackEl.hidden = false;
+            fallbackEl.textContent = initialsFromName(displayName);
+        };
+        // Session cookie is sent for same-origin avatar URLs (/api/auth/avatar).
+        if (pictureUrl.startsWith('/api/')) {
+            imgEl.removeAttribute('crossorigin');
+        }
         imgEl.src = pictureUrl;
         imgEl.alt = displayName;
         imgEl.hidden = false;
@@ -40,6 +51,8 @@ function applyAvatarToSlot(imgEl, fallbackEl, displayName, pictureUrl) {
         fallbackEl.textContent = '';
         return;
     }
+
+    imgEl.onerror = null;
 
     imgEl.removeAttribute('src');
     imgEl.hidden = true;

@@ -24,6 +24,13 @@ def test_cars_requires_auth_without_override(monkeypatch):
 def test_cars_allows_dev_auth_bypass(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DEV_AUTH_BYPASS", "true")
+    for key in (
+        "AZURE_AD_TENANT_ID",
+        "AZURE_AD_CLIENT_ID",
+        "AZURE_AD_CLIENT_SECRET",
+        "AZURE_AD_REDIRECT_URI",
+    ):
+        monkeypatch.delenv(key, raising=False)
     with TestClient(app) as bare_client:
         response = bare_client.get("/cars")
     assert response.status_code == 200

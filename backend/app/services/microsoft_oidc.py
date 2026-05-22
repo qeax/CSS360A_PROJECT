@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Optional
 
@@ -9,11 +10,18 @@ import httpx
 import jwt
 from jwt import PyJWKClient
 
+from app.services.profile_photo import fetch_profile_photo_from_graph
+
 _oidc_cache: dict[str, Any] = {}
 _oidc_cache_ts: float = 0.0
 _OIDC_CACHE_TTL_SEC = 3600
 
 _jwk_clients: dict[str, PyJWKClient] = {}
+
+logger = logging.getLogger(__name__)
+
+# Delegated scope for the signed-in user's own profile photo (Graph).
+GRAPH_LOGIN_SCOPES = "openid profile email User.Read"
 
 
 def _discovery_url(tenant_id: str) -> str:
@@ -58,6 +66,7 @@ def exchange_code_for_tokens(
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect_uri,
+        "scope": GRAPH_LOGIN_SCOPES,
     }
     with httpx.Client(timeout=30.0) as client:
         r = client.post(
@@ -112,7 +121,26 @@ def pick_display_name(claims: dict[str, Any]) -> Optional[str]:
 
 
 def pick_profile_picture_url(claims: dict[str, Any]) -> Optional[str]:
+    """Id token rarely includes ``picture`` for Entra; prefer Graph at login."""
     picture = claims.get("picture")
     if isinstance(picture, str) and picture.strip():
         return picture.strip()
+    return None
+
+
+def resolve_profile_picture_url(
+    claims: dict[str, Any],
+    tokens: dict[str, Any],
+) -> Optional[str]:
+    """Prefer Graph photo (packed storage); fall back to a ``picture`` claim if present."""
+    access_token = tokens.get("access_token")
+    if isinstance(access_token, str) and access_token.strip():
+        graph_photo = fetch_profile_photo_from_graph(access_token)
+        if graph_photo:
+            return graph_photo
+    else:
+        logger.warning("OAuth token response missing access_token; cannot load Graph photo")
+    from_token = pick_profile_picture_url(claims)
+    if from_token:
+        return from_token
     return None

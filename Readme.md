@@ -78,7 +78,7 @@ Migrations live under [backend/alembic/versions/](backend/alembic/versions/).
 
 Implementation: [backend/app/api/routes/auth.py](backend/app/api/routes/auth.py), [backend/app/services/microsoft_oidc.py](backend/app/services/microsoft_oidc.py).
 
-**Local development** — for technical and security reasons, real Microsoft sign-in is **not required**. With `APP_ENV=development` and `DEV_AUTH_BYPASS=true`, the same `/api/auth/login` endpoint creates a local user and session **without** redirecting to Microsoft (fake SSO). In production the bypass is **hard-disabled** (`APP_ENV=production` ignores the flag; enabling bypass in production prevents the app from starting). Entra secrets do not belong in the public repo — see [local development](#local-development).
+**Local development** — fake sign-in runs only when `APP_ENV` is not production, `DEV_AUTH_BYPASS=true`, and all four `AZURE_AD_*` login variables are **unset or empty**. If Entra is configured locally, `/api/auth/login` uses real Microsoft sign-in (name and profile photo from the id token). In production the bypass is **hard-disabled**. See [local development](#local-development).
 
 ### Backend (layers)
 
@@ -109,7 +109,7 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `APP_ENV` | `development` or `production` — app mode and auth checks |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MariaDB connection |
 | `MYSQL_ROOT_PASSWORD` | Root password for the `db` container |
-| `DEV_AUTH_BYPASS`, `DEV_AUTH_EMAIL` | Non-prod only: fake sign-in |
+| `DEV_AUTH_BYPASS`, `DEV_AUTH_EMAIL` | Non-prod only: fake sign-in when `AZURE_AD_*` is not configured |
 | `SEED_ON_START`, `PURGE_DEMO_ON_START` | Run seed / demo purge on container start |
 | `SEED_WRITE_DEMO_TO_DB` | Explicit write of demo rows to MySQL (see [seeds](#demo-catalog-and-seeds)) |
 | `DEMO_IN_MEMORY_WHEN_EMPTY`, `DEMO_SEED_COUNT` | In-memory catalog when `cars` is empty |
@@ -300,14 +300,15 @@ Serve `frontend/` with any static server on port 8080; Compose + Nginx is simple
 1. Set `DEV_AUTH_BYPASS=false`
 2. Fill `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET`, `AUTH_SESSION_SECRET`
 3. Set `AZURE_AD_REDIRECT_URI=http://localhost:8080/api/auth/callback` and add the same URI in Entra → **Authentication** → Redirect URIs
+4. Entra app registration → **API permissions** → Microsoft Graph → delegated **User.Read** (profile photo is loaded via Graph, not the id token)
 
 ### Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
 | `network proxy_network not found` | Run `docker network create proxy_network` |
-| Login redirects to Microsoft then fails | Confirm `DEV_AUTH_BYPASS=true` in `.env` and restart compose |
-| `authentication_is_not_configured` on login | Bypass is off and Azure vars are missing — enable bypass or configure Entra |
+| Login redirects to Microsoft then fails | Check Entra app registration and `AZURE_AD_REDIRECT_URI`; or unset `AZURE_AD_*` and use `DEV_AUTH_BYPASS=true` |
+| `authentication_is_not_configured` on login | Bypass is off (`DEV_AUTH_BYPASS` false or `AZURE_AD_*` set) and login cannot proceed — configure Entra or enable bypass with empty `AZURE_AD_*` |
 | Empty inventory | Check DevTools for `401` on `/api/cars`; confirm session / bypass |
 | Port already in use | Change ports in `docker-compose.override.yml` |
 

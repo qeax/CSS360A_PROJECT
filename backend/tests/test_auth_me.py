@@ -43,6 +43,13 @@ def test_auth_me_dev_bypass_includes_profile_fields(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DEV_AUTH_BYPASS", "true")
     monkeypatch.setenv("DEV_AUTH_EMAIL", "dev.user@localhost")
+    for key in (
+        "AZURE_AD_TENANT_ID",
+        "AZURE_AD_CLIENT_ID",
+        "AZURE_AD_CLIENT_SECRET",
+        "AZURE_AD_REDIRECT_URI",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
     with TestClient(app) as bare_client:
         response = bare_client.get("/auth/me")
