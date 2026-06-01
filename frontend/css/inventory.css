@@ -284,14 +284,39 @@ article.car-card:focus-within .car-card-carousel-dots {
 }
 
 .car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot {
+    position: relative;
     flex: 0 0 var(--carousel-dot-slot);
-    width: var(--carousel-dot-size);
-    margin: 0 auto;
-}
-
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"] {
     width: var(--carousel-dot-slot);
     height: var(--carousel-dot-size);
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: var(--carousel-dot-size);
+    height: var(--carousel-dot-size);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    transition: width 0.2s ease, border-radius 0.2s ease, background 0.2s ease;
+    pointer-events: none;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot:hover::after {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot.is-window-edge::after {
+    opacity: 0.45;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"]::after {
+    width: var(--carousel-dot-slot);
     border-radius: 999px;
     background: #fff;
     opacity: 1;
@@ -310,7 +335,7 @@ article.car-card:focus-within .car-card-carousel-dots {
     transition: background 0.2s, opacity 0.2s;
 }
 
-.car-card-carousel-dot:hover {
+.car-card-carousel-dots:not(.is-carousel-slide) .car-card-carousel-dot:hover {
     background: rgba(255, 255, 255, 0.7);
 }
 
