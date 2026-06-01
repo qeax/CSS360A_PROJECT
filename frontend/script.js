@@ -17,6 +17,10 @@ let currentResults = [];
 let listTotal = 0;
 let inventoryMeta = null;
 let sortDesc = true;
+let lastDataMode = 'database';
+
+const CAROUSEL_DOTS_CENTER_IDX = 3;
+const CAROUSEL_DOT_STEP_PX = 12;
 
 /** @type {{ countries: Set<string>, regions: Set<string>, cities: Set<string> }} */
 const locSelection = {
@@ -213,10 +217,14 @@ function formatListingMeta(car) {
     return { text: listingFormatLabel(car.listing_format), showSep: true };
 }
 
+function formatMileageLabel(car) {
+    if (car.mileage == null) return 'Mileage unknown';
+    return `${Number(car.mileage).toLocaleString()} mi`;
+}
+
 function carSubtitleLine(car) {
     const cond = car.condition || '—';
-    const miles = car.mileage != null ? `${Number(car.mileage).toLocaleString()} mi` : '— mi';
-    return `${cond} · ${miles}`;
+    return `${cond} · ${formatMileageLabel(car)}`;
 }
 
 function priceBlockHtml(car) {
@@ -786,13 +794,14 @@ function updateResultsHintAndLoadMore() {
     const hint = document.getElementById('inventoryResultsHint');
     const wrap = document.getElementById('inventoryLoadMoreWrap');
     const btn = document.getElementById('loadMoreBtn');
+    const dbSuffix = lastDataMode === 'database' ? ' (Database mode)' : '';
     if (hint) {
         if (listTotal === 0) {
             hint.textContent = carData.length === 0 ? 'No listings match your filters.' : '';
         } else if (carData.length >= listTotal) {
-            hint.textContent = `Showing all ${listTotal} listing${listTotal === 1 ? '' : 's'}`;
+            hint.textContent = `Showing all ${listTotal} listing${listTotal === 1 ? '' : 's'}${dbSuffix}`;
         } else {
-            hint.textContent = `Showing ${carData.length} of ${listTotal} listings`;
+            hint.textContent = `Showing ${carData.length} of ${listTotal} listings${dbSuffix}`;
         }
     }
     if (wrap && btn) {
@@ -883,6 +892,9 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
     const minProfit = document.getElementById('filterMinProfit')?.value.trim();
     if (minRoi) query.searchParams.set('min_roi', minRoi);
     if (minProfit) query.searchParams.set('min_profit', minProfit);
+    if (document.getElementById('filterExcludeNegativeRoi')?.checked) {
+        query.searchParams.set('exclude_negative_roi', 'true');
+    }
 
     const sortBy = document.getElementById('frontendSortBy')?.value || 'roi';
     query.searchParams.set('sort_by', sortBy);
@@ -916,6 +928,16 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
         const payload = await response.json();
         const items = Array.isArray(payload.items) ? payload.items : [];
         listTotal = typeof payload.total === 'number' ? payload.total : items.length;
+        lastDataMode = payload.data_mode === 'ebay_refreshed' ? 'ebay_refreshed' : 'database';
+        if (
+            syncEbay &&
+            lastDataMode === 'database' &&
+            payload.ebay_sync?.status === 'failed' &&
+            hint &&
+            !hint.textContent.includes('cooldown')
+        ) {
+            hint.textContent = 'eBay sync failed; showing saved listings.';
+        }
         if (append) {
             carData = carData.concat(items);
         } else {
@@ -967,15 +989,25 @@ function carouselDotWindow(count, activeIndex) {
 
 function carouselDotsHtml(count, activeIndex) {
     const win = carouselDotWindow(count, activeIndex);
-    let html = '';
+    const activeInWindow = activeIndex - win.start;
+    const translateX =
+        count > MAX_CAROUSEL_DOTS
+            ? (CAROUSEL_DOTS_CENTER_IDX - activeInWindow) * CAROUSEL_DOT_STEP_PX
+            : 0;
+    let buttons = '';
     for (let slideIdx = win.start; slideIdx <= win.end; slideIdx += 1) {
         const edge =
             count > MAX_CAROUSEL_DOTS &&
             ((slideIdx === win.start && win.start > 0) || (slideIdx === win.end && win.end < count - 1));
         const edgeCls = edge ? ' is-window-edge' : '';
-        html += `<button type="button" class="car-card-carousel-dot${edgeCls}" data-slide-to="${slideIdx}" aria-label="Photo ${slideIdx + 1}" aria-current="${slideIdx === activeIndex ? 'true' : 'false'}"></button>`;
+        buttons += `<button type="button" class="car-card-carousel-dot${edgeCls}" data-slide-to="${slideIdx}" aria-label="Photo ${slideIdx + 1}" aria-current="${slideIdx === activeIndex ? 'true' : 'false'}"></button>`;
     }
-    return html;
+    return `<div class="car-card-carousel-dots-viewport"><div class="car-card-carousel-dots-track" style="transform: translateX(${translateX}px)">${buttons}</div></div>`;
+}
+
+function carouselDotsWrapHtml(count, activeIndex) {
+    if (count < 2) return '';
+    return `<div class="car-card-carousel-dots"><span class="car-card-carousel-dots-center" aria-hidden="true"></span>${carouselDotsHtml(count, activeIndex)}</div>`;
 }
 
 function carouselHtml(car) {
@@ -1001,7 +1033,7 @@ function carouselHtml(car) {
         <button type="button" class="car-card-carousel-nav car-card-carousel-nav--next" aria-label="Next photo">
             <svg class="car-card-carousel-nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
-        <div class="car-card-carousel-dots">${carouselDotsHtml(imgs.length, 0)}</div>`
+        ${carouselDotsWrapHtml(imgs.length, 0)}`
             : '';
     return `<div class="car-card-carousel" data-carousel data-count="${imgs.length}">${slides}${nav}</div>`;
 }
@@ -1165,7 +1197,9 @@ function updateUI(items) {
         const show = (i) => {
             idx = (i + count) % count;
             imgs.forEach((img, j) => img.toggleAttribute('hidden', j !== idx));
-            if (dotsBox) dotsBox.innerHTML = carouselDotsHtml(count, idx);
+            if (dotsBox) {
+                dotsBox.innerHTML = `<span class="car-card-carousel-dots-center" aria-hidden="true"></span>${carouselDotsHtml(count, idx)}`;
+            }
         };
         root.querySelector('.car-card-carousel-nav--prev')?.addEventListener('click', (ev) => {
             ev.preventDefault();
@@ -1195,6 +1229,12 @@ function showCarDetails(car) {
     header.textContent =
         car.year != null ? `${car.brand} ${car.model} (${car.year})` : `${car.brand} ${car.model}`;
 
+    const mileageDisplay =
+        car.mileage != null ? `${Number(car.mileage).toLocaleString()} mi` : 'Unknown mileage';
+    const jsonDebugBtn = getSettings().showListingJsonDebug
+        ? '<button type="button" class="modal-json-debug-btn" id="modalViewRawJsonBtn">View raw JSON</button>'
+        : '';
+
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:16px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -1205,7 +1245,7 @@ function showCarDetails(car) {
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">REPAIR</div>
                     <div style="font-size:20px;font-weight:700;">$${car.repair_cost.toLocaleString()}</div></div>
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">MILEAGE</div>
-                    <div style="font-size:20px;font-weight:700;">${car.mileage != null ? car.mileage.toLocaleString() : 'N/A'} mi</div></div>
+                    <div style="font-size:20px;font-weight:700;">${escapeHtml(mileageDisplay)}</div></div>
             </div>
             <div style="height:1px;background:var(--separator);"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -1221,7 +1261,37 @@ function showCarDetails(car) {
                 </div>
             </div>
             ${listingLinkHtml(car, 'modal-listing-link')}
+            ${jsonDebugBtn}
+            <pre class="modal-raw-json" id="modalRawJsonPre" hidden></pre>
         </div>`;
+
+    document.getElementById('modalViewRawJsonBtn')?.addEventListener('click', async () => {
+        const pre = document.getElementById('modalRawJsonPre');
+        const btn = document.getElementById('modalViewRawJsonBtn');
+        if (!pre || !btn) return;
+        if (!pre.hidden && pre.textContent) {
+            pre.hidden = true;
+            btn.textContent = 'View raw JSON';
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Loading…';
+        try {
+            const res = await fetch(`/api/cars/${car.id}/raw-listing`, { credentials: 'include' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            pre.textContent = JSON.stringify(data.raw_listing_json, null, 2);
+            pre.hidden = false;
+            btn.textContent = 'Hide raw JSON';
+        } catch (err) {
+            console.error(err);
+            pre.textContent = 'Failed to load raw listing JSON.';
+            pre.hidden = false;
+            btn.textContent = 'View raw JSON';
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     modal.classList.add('active');
 }
@@ -1234,6 +1304,8 @@ function resetFilters() {
     document.querySelectorAll('.filter-chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
     document.getElementById('filterMinRoi').value = '';
     document.getElementById('filterMinProfit').value = '';
+    const excludeRoi = document.getElementById('filterExcludeNegativeRoi');
+    if (excludeRoi) excludeRoi.checked = false;
     makeSelection.clear();
     clearLocationSelections();
     if (inventoryMeta) populateMetaIntoUi(inventoryMeta);

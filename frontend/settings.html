@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile · Car Flip CSS360</title>
+    <title>Settings · Car Flip CSS360</title>
     <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -43,8 +43,8 @@
                     <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 4l4 4 4-4z"/></svg>
                 </button>
                 <div class="app-account-menu" id="accountMenu" role="menu" hidden>
-                    <a class="app-account-menu-item" role="menuitem" href="profile.html" aria-current="page">Profile</a>
-                    <a class="app-account-menu-item" role="menuitem" href="settings.html">Settings</a>
+                    <a class="app-account-menu-item" role="menuitem" href="profile.html">Profile</a>
+                    <a class="app-account-menu-item" role="menuitem" href="settings.html" aria-current="page">Settings</a>
                     <a class="app-account-menu-item app-account-menu-item--logout" role="menuitem" href="/api/auth/logout">Log out</a>
                 </div>
             </div>
@@ -53,17 +53,19 @@
 
     <main class="profile-page">
         <a class="profile-back" href="index.html">← Back to inventory</a>
-        <section class="profile-card" aria-labelledby="profileHeading">
-            <div class="profile-card-avatar-wrap">
-                <img class="profile-card-avatar" id="profileAvatarImg" alt="" width="96" height="96" hidden>
-                <span class="profile-card-avatar profile-card-avatar--fallback" id="profileAvatarFallback" aria-hidden="true"></span>
-            </div>
-            <h1 class="profile-card-name" id="profileHeading"></h1>
-            <p class="profile-card-email" id="profileEmail"></p>
+        <section class="profile-card" aria-labelledby="settingsHeading">
+            <h1 class="profile-card-name" id="settingsHeading">Settings</h1>
+            <p class="profile-card-email">Preferences are stored in this browser only.</p>
+            <label class="filter-checkbox settings-toggle">
+                <input type="checkbox" id="showListingJsonDebug">
+                Show listing JSON debug button
+            </label>
+            <button type="button" class="btn-apply-filters" id="saveSettingsBtn" style="margin-top:16px;">Save</button>
+            <p class="settings-saved-msg" id="settingsSavedMsg" hidden>Saved.</p>
         </section>
     </main>
 
     <script src="app-shell.js"></script>
-    <script src="profile.js"></script>
+    <script src="settings.js"></script>
 </body>
 </html>

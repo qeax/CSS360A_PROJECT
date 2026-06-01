@@ -89,3 +89,118 @@ def test_filter_country_not_specified(db):
     )
     assert len(out) == 1
     assert out[0]["location"] is None or not out[0]["location"].get("country")
+
+
+def test_exclude_negative_roi(db):
+    neg = Car(
+        brand="A",
+        model="B",
+        year=2020,
+        price=10000,
+        repair_cost=5000,
+        resale_value=8000,
+        source="ebay",
+        external_listing_id=f"neg-{uuid.uuid4().hex}",
+    )
+    pos = Car(
+        brand="A",
+        model="B",
+        year=2020,
+        price=10000,
+        repair_cost=1000,
+        resale_value=15000,
+        source="ebay",
+        external_listing_id=f"pos-{uuid.uuid4().hex}",
+    )
+    db.add_all([neg, pos])
+    db.commit()
+    rows = list(db.scalars(select(Car)).all())
+    out = apply_filters(
+        rows,
+        make=None,
+        makes=None,
+        model=None,
+        min_year=None,
+        max_year=None,
+        min_mileage=None,
+        max_mileage=None,
+        condition=None,
+        conditions=None,
+        max_price=None,
+        min_price=None,
+        min_profit=None,
+        min_roi=None,
+        q=None,
+        countries=None,
+        regions=None,
+        cities=None,
+        radius_km=None,
+        radius_mi=None,
+        anchor_lat=None,
+        anchor_lng=None,
+        listing_formats=None,
+        body_styles=None,
+        delivery_modes=None,
+        vehicle_titles=None,
+        exclude_negative_roi=True,
+    )
+    assert len(out) == 1
+    assert out[0]["net_profit"] >= 0
+
+
+def test_mileage_filter_skips_unknown_mileage(db):
+    unknown = Car(
+        brand="A",
+        model="B",
+        year=2020,
+        price=10000,
+        repair_cost=0,
+        resale_value=12000,
+        mileage=None,
+        source="ebay",
+        external_listing_id=f"nomile-{uuid.uuid4().hex}",
+    )
+    known = Car(
+        brand="A",
+        model="B",
+        year=2020,
+        price=10000,
+        repair_cost=0,
+        resale_value=12000,
+        mileage=52000,
+        source="ebay",
+        external_listing_id=f"mile-{uuid.uuid4().hex}",
+    )
+    db.add_all([unknown, known])
+    db.commit()
+    rows = list(db.scalars(select(Car)).all())
+    out = apply_filters(
+        rows,
+        make=None,
+        makes=None,
+        model=None,
+        min_year=None,
+        max_year=None,
+        min_mileage=60000,
+        max_mileage=80000,
+        condition=None,
+        conditions=None,
+        max_price=None,
+        min_price=None,
+        min_profit=None,
+        min_roi=None,
+        q=None,
+        countries=None,
+        regions=None,
+        cities=None,
+        radius_km=None,
+        radius_mi=None,
+        anchor_lat=None,
+        anchor_lng=None,
+        listing_formats=None,
+        body_styles=None,
+        delivery_modes=None,
+        vehicle_titles=None,
+    )
+    assert len(out) == 1
+    assert out[0]["mileage"] is None

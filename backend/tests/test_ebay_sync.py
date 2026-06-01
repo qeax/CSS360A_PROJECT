@@ -132,3 +132,42 @@ def test_sync_cooldown(monkeypatch, db):
 
     with pytest.raises(EbaySyncCooldownError):
         check_sync_cooldown(1)
+
+
+def test_sync_fetch_failure_returns_failed_status(monkeypatch, db):
+    reset_sync_cooldown_for_tests()
+
+    def boom(**_kwargs):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr("app.services.ebay_sync.fetch_ebay_listings_for_sync", boom)
+
+    class _FakeClient:
+        def is_configured(self) -> bool:
+            return True
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+
+    stats = sync_ebay_inventory(db, user_id=2, q="honda", enforce_cooldown=False)
+    assert stats["status"] == "failed"
+    assert stats["synced"] == 0
+    assert "network down" in stats.get("error", "")
+
+
+def test_sync_success_includes_ok_status(monkeypatch, db):
+    reset_sync_cooldown_for_tests()
+
+    monkeypatch.setattr(
+        "app.services.ebay_sync.fetch_ebay_listings_for_sync",
+        lambda **_kwargs: [_sample_listing("v1|300|0")],
+    )
+
+    class _FakeClient:
+        def is_configured(self) -> bool:
+            return True
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+
+    stats = sync_ebay_inventory(db, user_id=3, q="honda", enforce_cooldown=False)
+    assert stats["status"] == "ok"
+    assert stats["synced"] == 1

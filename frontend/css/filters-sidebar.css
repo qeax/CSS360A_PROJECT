@@ -107,6 +107,22 @@
     margin-bottom: 12px;
 }
 
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.filter-checkbox input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-green);
+}
+
 .filters-sidebar .input-group label,
 .filter-dropdown-label {
     display: block;

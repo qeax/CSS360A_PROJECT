@@ -120,7 +120,7 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `ALLOWED_EMAIL_DOMAIN` | Optional email domain restriction |
 | `APP_PUBLIC_HOST` | Hostname for Traefik (no scheme), e.g. `app.example.com` |
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
-| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | eBay ingest when UI sends `sync_ebay=true` (first load, Search, Apply filters) |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | eBay ingest when UI sends `sync_ebay=true` (first load, Search) |
 | `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
 | `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
 | `EBAY_SEARCH_LIMIT` | Max search hits per Browse page (default `50`) |
@@ -143,6 +143,12 @@ One-time on container start: `PURGE_INVENTORY_ON_START=true` in `.env`.
 `SEED_ON_START=false` with empty DB: inventory is empty until the first `sync_ebay` (page load triggers one). Legacy in-memory demo applies only to `/cars/meta` bounds when eBay is unconfigured.
 
 `sync_ebay=true` runs only on **first page load** and **Search** (not on Apply filters). Sidebar filters query the database only.
+
+`GET /api/cars` includes `data_mode`: `ebay_refreshed` after a successful sync, or `database` when serving cached rows (sync off, eBay failure, or cooldown fallback). The UI shows **(Database mode)** in the results hint when `data_mode` is `database`.
+
+If eBay sync fails (network/token/commit), the API still returns **200** with DB listings and `data_mode: database` (except **429** cooldown, which the UI retries without `sync_ebay`).
+
+Optional **Settings** (`settings.html`, `localStorage`) enables a **View raw JSON** button in the listing modal (`GET /api/cars/{id}/raw-listing`).
 
 Debug after deploy: `GET /api/ebay/health` → `configured`, `inventory_mode`, `in_memory_demo_enabled`.
 

@@ -131,6 +131,28 @@ function initThemeToggle() {
     document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
 }
 
+const CSS360_SETTINGS_KEY = 'css360_settings_v1';
+
+function getSettings() {
+    try {
+        const raw = localStorage.getItem(CSS360_SETTINGS_KEY);
+        if (!raw) return { showListingJsonDebug: false };
+        const parsed = JSON.parse(raw);
+        return { showListingJsonDebug: Boolean(parsed.showListingJsonDebug) };
+    } catch {
+        return { showListingJsonDebug: false };
+    }
+}
+
+function saveSettings(settings) {
+    localStorage.setItem(
+        CSS360_SETTINGS_KEY,
+        JSON.stringify({
+            showListingJsonDebug: Boolean(settings.showListingJsonDebug),
+        }),
+    );
+}
+
 function initAppShell() {
     initTheme();
     initThemeToggle();

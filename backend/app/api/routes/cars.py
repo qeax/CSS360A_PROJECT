@@ -1,12 +1,14 @@
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user
 from app.db import get_db
 from app.integrations.ebay.client import get_ebay_client
+from app.models.car import Car
 from app.models.user import User
 from app.repositories.cars import (
     _q_tokens,
@@ -21,6 +23,30 @@ router = APIRouter(tags=["cars"])
 
 _DEFAULT_PAGE_SIZE = 30
 _MAX_PAGE_SIZE = 50
+
+
+def _resolve_data_mode(sync_ebay: bool, sync_stats: dict[str, Any] | None) -> str:
+    if not sync_ebay:
+        return "database"
+    if sync_stats is None:
+        return "database"
+    if not sync_stats.get("configured"):
+        return "database"
+    if sync_stats.get("status") == "ok":
+        return "ebay_refreshed"
+    return "database"
+
+
+@router.get("/cars/{car_id}/raw-listing")
+def get_car_raw_listing(
+    car_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    car = db.execute(select(Car).where(Car.id == car_id)).scalar_one_or_none()
+    if car is None or not car.raw_listing_json:
+        raise HTTPException(status_code=404, detail="raw_listing_not_found")
+    return {"id": car.id, "raw_listing_json": car.raw_listing_json}
 
 
 @router.get("/cars/meta")
@@ -52,6 +78,7 @@ def get_cars(
     min_price: Optional[float] = Query(None),
     min_profit: Optional[float] = Query(None),
     min_roi: Optional[float] = Query(None),
+    exclude_negative_roi: bool = Query(False),
     q: Optional[str] = Query(None),
     countries: Annotated[Optional[list[str]], Query()] = None,
     regions: Annotated[Optional[list[str]], Query()] = None,
@@ -91,11 +118,14 @@ def get_cars(
                         "retry_after_sec": round(e.retry_after_sec, 1),
                     },
                 ) from e
-            except SQLAlchemyError as e:
-                raise HTTPException(
-                    status_code=503,
-                    detail={"error": "database_unavailable", "message": str(e)},
-                ) from e
+            except Exception as e:
+                db.rollback()
+                sync_stats = {
+                    "synced": 0,
+                    "configured": True,
+                    "status": "failed",
+                    "error": str(e)[:500],
+                }
 
     try:
         rows = iter_cars(db, inventory_query=q)
@@ -132,6 +162,7 @@ def get_cars(
         body_styles=body_styles,
         delivery_modes=delivery_modes,
         vehicle_titles=vehicle_titles,
+        exclude_negative_roi=exclude_negative_roi,
     )
 
     effective_sort = sort_by
@@ -144,6 +175,7 @@ def get_cars(
         "items": page,
         "total": total,
         "inventory_source": "database",
+        "data_mode": _resolve_data_mode(sync_ebay, sync_stats),
     }
     if sync_stats is not None:
         payload["ebay_sync"] = sync_stats

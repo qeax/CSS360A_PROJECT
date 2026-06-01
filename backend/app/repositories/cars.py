@@ -40,15 +40,18 @@ def _year_slider_bounds() -> tuple[int, int]:
 logger = logging.getLogger(__name__)
 
 
-def _effective_mileage(car: Any) -> int:
-    """Mileage used for filtering when listing data has no odometer."""
+def _listing_mileage_mi(car: Any) -> int | None:
+    """Plausible odometer from listing, or None when unknown."""
     mm = getattr(car, "mileage", None)
-    if mm is not None:
+    if mm is None:
+        return None
+    try:
         mi = int(mm)
-        if is_plausible_odometer(mi):
-            return mi
-    car_id = getattr(car, "id", None) or 1
-    return 75000 + (int(car_id) * 1500) % 90000
+    except (TypeError, ValueError):
+        return None
+    if is_plausible_odometer(mi):
+        return mi
+    return None
 
 
 def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]:
@@ -401,6 +404,7 @@ def apply_filters(
     body_styles: Optional[list[str]],
     delivery_modes: Optional[list[str]],
     vehicle_titles: Optional[list[str]],
+    exclude_negative_roi: bool = False,
 ) -> list:
     q_toks = _q_tokens(q)
     countries_l = [c.strip().lower() for c in (countries or []) if c and str(c).strip()]
@@ -441,11 +445,12 @@ def apply_filters(
             if max_year is not None and car.year > max_year:
                 continue
 
-        mi = _effective_mileage(car)
-        if min_mileage is not None and mi < min_mileage:
-            continue
-        if max_mileage is not None and mi > max_mileage:
-            continue
+        mi = _listing_mileage_mi(car)
+        if mi is not None:
+            if min_mileage is not None and mi < min_mileage:
+                continue
+            if max_mileage is not None and mi > max_mileage:
+                continue
 
         cond_value = (car.condition or "").strip().lower()
         if conditions_l:
@@ -526,6 +531,8 @@ def apply_filters(
             continue
 
         analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
+        if exclude_negative_roi and analysis["roi"] < 0:
+            continue
         if min_profit is not None and analysis["net_profit"] < min_profit:
             continue
         if min_roi is not None and analysis["roi"] < min_roi:

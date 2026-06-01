@@ -19,7 +19,6 @@ from app.integrations.ebay.client import (
 from app.integrations.ebay.parse_item import (
     _parse_mileage,
     is_plausible_odometer,
-    resolve_listing_year,
 )
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.services.flip import estimate_flip_from_listing
@@ -111,12 +110,18 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     if price <= 0:
         price = 1.0
 
-    brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
-    year = resolve_listing_year(
+    from app.integrations.ebay.parse_item import resolve_vehicle_facets
+
+    facets = resolve_vehicle_facets(
         title,
+        brand_hint=item.get("brand"),
+        model_hint=item.get("model"),
         year_hint=item.get("year"),
         aspects=item.get("aspects_json"),
     )
+    brand = facets["brand"] or "Unknown"
+    model = facets["model"] or "Listing"
+    year = facets["year"]
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
     year_econ = year
 
@@ -158,8 +163,9 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
 
     loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
     city = (loc_in.get("city") or item.get("location_city") or "").strip() or "—"
+    country = (loc_in.get("country") or "").strip() or None
     loc = SimpleNamespace(
-        country=loc_in.get("country") or "United States",
+        country=country,
         region=loc_in.get("region") or "",
         city=city,
         postal_code_masked=loc_in.get("postal_code_masked"),

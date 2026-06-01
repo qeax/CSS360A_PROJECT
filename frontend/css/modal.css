@@ -57,3 +57,30 @@
     gap: 10px;
     justify-content: flex-end;
 }
+
+.modal-json-debug-btn {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-page);
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+}
+
+.modal-raw-json {
+    margin: 0;
+    padding: 12px;
+    max-height: 240px;
+    overflow: auto;
+    font-size: 11px;
+    line-height: 1.4;
+    background: var(--bg-page);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

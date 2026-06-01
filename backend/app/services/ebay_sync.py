@@ -14,10 +14,12 @@ from sqlalchemy.orm import Session
 from app.integrations.ebay.client import ebay_fetch_cap, get_ebay_client
 from app.integrations.ebay.inventory import (
     _default_ebay_query,
-    _parse_brand_model,
     resolve_listing_url,
 )
-from app.integrations.ebay.parse_item import is_plausible_odometer, resolve_listing_year
+from app.integrations.ebay.parse_item import (
+    is_plausible_odometer,
+    resolve_vehicle_facets,
+)
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.models.car import Car
 from app.models.car_satellite import (
@@ -199,12 +201,16 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
     if price <= 0:
         price = 1.0
 
-    brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
-    year = resolve_listing_year(
+    facets = resolve_vehicle_facets(
         title,
+        brand_hint=item.get("brand"),
+        model_hint=item.get("model"),
         year_hint=item.get("year"),
         aspects=item.get("aspects_json"),
     )
+    brand = facets["brand"] or "Unknown"
+    model = facets["model"] or "Listing"
+    year = facets["year"]
     year_econ = year
 
     mileage_for_flip: int | None = None
@@ -318,51 +324,84 @@ def sync_ebay_inventory(
     Fetch listings from eBay, upsert into DB, return sync stats.
 
     Raises EbaySyncCooldownError when called too soon for the same user.
+    On API/upsert failures returns status=failed without raising (caller serves DB inventory).
     """
     client = get_ebay_client()
     if not client.is_configured():
-        return {"synced": 0, "skipped": 0, "configured": False, "query": None}
+        return {
+            "synced": 0,
+            "skipped": 0,
+            "configured": False,
+            "status": "not_configured",
+            "query": None,
+        }
 
     if enforce_cooldown:
         check_sync_cooldown(user_id)
 
     search_q = build_ebay_search_query(q=q)
-    listings = fetch_ebay_listings_for_sync(query=search_q)
-    synced = 0
-    skipped = 0
-    for item in listings:
-        try:
-            with db.begin_nested():
-                if upsert_ebay_listing(db, item) is not None:
-                    synced += 1
-                else:
-                    skipped += 1
-        except Exception as e:
-            logger.warning("eBay upsert failed for %s: %s", item.get("external_listing_id"), e)
-            skipped += 1
-
     try:
-        db.commit()
+        listings = fetch_ebay_listings_for_sync(query=search_q)
+        synced = 0
+        skipped = 0
+        for item in listings:
+            try:
+                with db.begin_nested():
+                    if upsert_ebay_listing(db, item) is not None:
+                        synced += 1
+                    else:
+                        skipped += 1
+            except Exception as e:
+                logger.warning(
+                    "eBay upsert failed for %s: %s",
+                    item.get("external_listing_id"),
+                    e,
+                )
+                skipped += 1
+
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error("eBay sync commit failed: %s", e)
+            return {
+                "synced": 0,
+                "skipped": skipped,
+                "configured": True,
+                "status": "failed",
+                "query": search_q,
+                "error": str(e),
+                "api_rows": len(listings),
+            }
+
+        if enforce_cooldown:
+            mark_sync_completed(user_id)
+
+        logger.info(
+            "eBay sync user=%s query=%r: %d upserted, %d skipped (api rows=%d)",
+            user_id,
+            search_q,
+            synced,
+            skipped,
+            len(listings),
+        )
+        return {
+            "synced": synced,
+            "skipped": skipped,
+            "configured": True,
+            "status": "ok",
+            "query": search_q,
+            "api_rows": len(listings),
+        }
     except Exception as e:
         db.rollback()
-        logger.error("eBay sync commit failed: %s", e)
-        raise
-
-    if enforce_cooldown:
-        mark_sync_completed(user_id)
-
-    logger.info(
-        "eBay sync user=%s query=%r: %d upserted, %d skipped (api rows=%d)",
-        user_id,
-        search_q,
-        synced,
-        skipped,
-        len(listings),
-    )
-    return {
-        "synced": synced,
-        "skipped": skipped,
-        "configured": True,
-        "query": search_q,
-        "api_rows": len(listings),
-    }
+        logger.error("eBay sync failed query=%r: %s", search_q, e)
+        return {
+            "synced": 0,
+            "skipped": 0,
+            "configured": True,
+            "status": "failed",
+            "query": search_q,
+            "error": str(e)[:500],
+            "api_rows": 0,
+        }
