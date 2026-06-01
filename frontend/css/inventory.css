@@ -240,21 +240,14 @@ article.car-card:focus-within .car-card-carousel-dots {
     z-index: 2;
 }
 
+/* Fits 7 dots with one active pointer at 18px (6×6px + 6 gaps + 18px slot) */
 .car-card-carousel-dots-viewport {
     position: relative;
     width: calc(
-        var(--carousel-dots-visible) * var(--carousel-dot-size) +
-            (var(--carousel-dots-visible) - 1) * var(--carousel-dot-gap)
+        (var(--carousel-dots-visible) - 1) * (var(--carousel-dot-size) + var(--carousel-dot-gap)) +
+            var(--carousel-dot-slot)
     );
     overflow: hidden;
-}
-
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dots-viewport {
-    width: calc(
-        var(--carousel-dots-visible) * var(--carousel-dot-slot-compact) +
-            (var(--carousel-dots-visible) - 1) * var(--carousel-dot-gap)
-    );
-    overflow: visible;
 }
 
 .car-card-carousel-dots-track {

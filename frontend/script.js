@@ -19,9 +19,8 @@ let inventoryMeta = null;
 let sortDesc = true;
 let lastDataMode = 'database';
 
+/** Center of a 7-dot strip (the 4th dot, 1-based). */
 const CAROUSEL_DOTS_CENTER_IDX = 3;
-/** Photos from start/end where only the pointer moves (strip stays put). */
-const CAROUSEL_EDGE_MARGIN = 3;
 
 /** @type {{ countries: Set<string>, regions: Set<string>, cities: Set<string> }} */
 const locSelection = {
@@ -1016,18 +1015,22 @@ function attrEncode(s) {
 }
 
 /**
- * Which dots are visible and whether the strip slides under a fixed center pointer.
- * - edge-start / edge-end / short: strip fixed, pointer (active dot) moves along it
- * - slide: pointer fixed at viewport center, strip window shifts with active slide
+ * Dot strip modes (always up to 7 visible dots when count > 7):
+ * - edge-start / edge-end: fixed window of 7 dots; only the pointer moves
+ * - slide: starts when the pointer reaches the 4th dot (center of 7), then window slides with photos
+ * - short: count ≤ 7 — all dots, pointer only
  */
 function carouselDotWindow(count, activeIndex) {
     if (count <= MAX_CAROUSEL_DOTS) {
         return { start: 0, end: count - 1, mode: 'short' };
     }
-    if (activeIndex < CAROUSEL_EDGE_MARGIN) {
+
+    const lastSlideCenter = count - 1 - CAROUSEL_DOTS_CENTER_IDX;
+
+    if (activeIndex < CAROUSEL_DOTS_CENTER_IDX) {
         return { start: 0, end: MAX_CAROUSEL_DOTS - 1, mode: 'edge-start' };
     }
-    if (activeIndex >= count - CAROUSEL_EDGE_MARGIN) {
+    if (activeIndex > lastSlideCenter) {
         return {
             start: count - MAX_CAROUSEL_DOTS,
             end: count - 1,
