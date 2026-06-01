@@ -1,4 +1,16 @@
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -6,11 +18,18 @@ from app.db import Base
 
 class Car(Base):
     __tablename__ = "cars"
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "external_listing_id",
+            name="uq_cars_source_external_listing_id",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     brand = Column(String(100), nullable=False, index=True)
     model = Column(String(100), nullable=False, index=True)
-    year = Column(Integer, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)
     price = Column(Float, nullable=False, index=True)
     repair_cost = Column(Float, nullable=False, default=0)
     resale_value = Column(Float, nullable=False)

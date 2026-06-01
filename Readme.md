@@ -90,7 +90,8 @@ Implementation: [backend/app/api/routes/auth.py](backend/app/api/routes/auth.py)
 | [backend/app/api/routes/](backend/app/api/routes/) | HTTP: `/cars`, `/health`, `/auth/*` |
 | [backend/app/repositories/](backend/app/repositories/) | Database queries |
 | [backend/app/services/](backend/app/services/) | ROI, geo, body style, OIDC |
-| [backend/app/integrations/ebay/](backend/app/integrations/ebay/) | eBay Browse API (in-memory on main `/cars` when DB empty; not persisted in sandbox) |
+| [backend/app/integrations/ebay/](backend/app/integrations/ebay/) | eBay Browse API ingest |
+| [backend/app/services/ebay_sync.py](backend/app/services/ebay_sync.py) | Upsert eBay listings into MySQL (`sync_ebay=1` on `/cars`) |
 
 ### Frontend
 
@@ -119,11 +120,12 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `ALLOWED_EMAIL_DOMAIN` | Optional email domain restriction |
 | `APP_PUBLIC_HOST` | Hostname for Traefik (no scheme), e.g. `app.example.com` |
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
-| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | Optional: live eBay inventory on `/cars` when MySQL has no rows (sandbox listings stay in memory only) |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | eBay ingest when UI sends `sync_ebay=true` (first load, Search, Apply filters) |
 | `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
 | `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
-| `EBAY_SEARCH_LIMIT` | Max search hits per request (default `24`) |
-| `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `10`; `0` = search only) |
+| `EBAY_SEARCH_LIMIT` | Max search hits per Browse page (default `50`) |
+| `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `12`; `0` = search only) |
+| `EBAY_SYNC_MIN_INTERVAL_SEC` | Per-user cooldown between `sync_ebay=1` calls (default `60`) |
 
 Clear all inventory in MySQL (cars + external sellers):
 
@@ -136,7 +138,11 @@ One-time on container start: `PURGE_INVENTORY_ON_START=true` in `.env`.
 | `INVENTORY_MODE` | `auto` (default), `ebay_only` (no demo fallback), `demo_only` |
 | `DEMO_IN_MEMORY_WHEN_EMPTY` | In `auto` mode: demo when DB empty and eBay empty/unconfigured |
 
-`SEED_ON_START=false` only skips writing demo rows **into MySQL**. The UI can still show **in-memory** demo unless `INVENTORY_MODE=ebay_only` (or `DEMO_IN_MEMORY_WHEN_EMPTY=false` in `auto` mode).
+`SEED_ON_START=false` only skips writing demo rows **into MySQL**. **`GET /api/cars` always reads from MySQL**; use `sync_ebay=true` to pull fresh listings from eBay (deduped by `external_listing_id`). Filter-only actions do not call eBay.
+
+`SEED_ON_START=false` with empty DB: inventory is empty until the first `sync_ebay` (page load triggers one). Legacy in-memory demo applies only to `/cars/meta` bounds when eBay is unconfigured.
+
+`sync_ebay=true` runs only on **first page load** and **Search** (not on Apply filters). Sidebar filters query the database only.
 
 Debug after deploy: `GET /api/ebay/health` → `configured`, `inventory_mode`, `in_memory_demo_enabled`.
 

@@ -6,6 +6,7 @@ Fetches listing data from eBay and normalizes into our Car schema.
 import base64
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -195,8 +196,15 @@ class EbayListingClient:
                 params["q"] = query
             if category_ids:
                 params["category_ids"] = category_ids
-            response = requests.get(url, headers=headers, params=params, timeout=10)
-            diag["http_status"] = response.status_code
+            response = None
+            for attempt in range(3):
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                diag["http_status"] = response.status_code
+                if response.status_code == 429 and attempt < 2:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                break
+            assert response is not None
             response.raise_for_status()
             payload = response.json()
             items = payload.get("itemSummaries") or []
@@ -309,7 +317,14 @@ class EbayListingClient:
                 "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             }
             params = {"fieldgroups": "PRODUCT"}
-            response = requests.get(url, headers=headers, params=params, timeout=6)
+            response = None
+            for attempt in range(3):
+                response = requests.get(url, headers=headers, params=params, timeout=6)
+                if response.status_code == 429 and attempt < 2:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                break
+            assert response is not None
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as e:

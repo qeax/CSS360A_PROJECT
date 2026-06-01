@@ -6,13 +6,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user
 from app.db import get_db
+from app.integrations.ebay.client import get_ebay_client
 from app.models.user import User
 from app.repositories.cars import (
+    _q_tokens,
     apply_filters,
     compute_inventory_meta,
     iter_cars,
     sort_car_dicts_inplace,
 )
+from app.services.ebay_sync import EbaySyncCooldownError, sync_ebay_inventory
 
 router = APIRouter(tags=["cars"])
 
@@ -63,11 +66,37 @@ def get_cars(
     vehicle_titles: Annotated[Optional[list[str]], Query()] = None,
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("desc"),
+    sync_ebay: bool = Query(False),
     limit: int = Query(_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    sync_stats: dict | None = None
+    if sync_ebay:
+        if not get_ebay_client().is_configured():
+            sync_stats = {"synced": 0, "configured": False, "skipped": True}
+        else:
+            try:
+                sync_stats = sync_ebay_inventory(
+                    db,
+                    user_id=int(current_user.id),
+                    q=q,
+                )
+            except EbaySyncCooldownError as e:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "ebay_sync_cooldown",
+                        "retry_after_sec": round(e.retry_after_sec, 1),
+                    },
+                ) from e
+            except SQLAlchemyError as e:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": "database_unavailable", "message": str(e)},
+                ) from e
+
     try:
         rows = iter_cars(db, inventory_query=q)
     except SQLAlchemyError as e:
@@ -105,7 +134,17 @@ def get_cars(
         vehicle_titles=vehicle_titles,
     )
 
-    sort_car_dicts_inplace(results, sort_by, sort_order)
+    effective_sort = sort_by
+    if not effective_sort and not _q_tokens(q):
+        effective_sort = "roi"
+    sort_car_dicts_inplace(results, effective_sort, sort_order)
     total = len(results)
     page = results[offset : offset + limit]
-    return {"items": page, "total": total}
+    payload: dict = {
+        "items": page,
+        "total": total,
+        "inventory_source": "database",
+    }
+    if sync_stats is not None:
+        payload["ebay_sync"] = sync_stats
+    return payload

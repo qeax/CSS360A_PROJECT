@@ -233,6 +233,11 @@ article.car-card:focus-within .car-card-carousel-dots {
     background: rgba(255, 255, 255, 0.7);
 }
 
+.car-card-carousel-dot.is-window-edge {
+    opacity: 0.55;
+    transform: scale(0.85);
+}
+
 .car-card-carousel-dot[aria-current="true"] {
     width: 18px;
     border-radius: 999px;
@@ -532,6 +537,13 @@ body.light-theme .car-card-metrics-col-value--roi {
     text-align: center;
     padding: 40px 16px;
     color: var(--text-muted);
+}
+
+.inventory-list--grid > .loading,
+.inventory-list--grid > .no-results {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: 100%;
 }
 
 .modal-header-title {

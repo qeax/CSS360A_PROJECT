@@ -1,4 +1,4 @@
-"""In-memory eBay listings for the main inventory API (never persisted to DB)."""
+"""eBay listing fetch and in-memory views (debug / legacy; production uses ebay_sync → DB)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ from app.integrations.ebay.client import (
     ebay_fetch_cap,
     get_ebay_client,
 )
-from app.integrations.ebay.parse_item import _parse_mileage, is_plausible_odometer
+from app.integrations.ebay.parse_item import (
+    _parse_mileage,
+    is_plausible_odometer,
+    resolve_listing_year,
+)
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.services.flip import estimate_flip_from_listing
 
@@ -108,15 +112,13 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
         price = 1.0
 
     brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
-    year = _parse_year(title, item.get("year"))
+    year = resolve_listing_year(
+        title,
+        year_hint=item.get("year"),
+        aspects=item.get("aspects_json"),
+    )
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
-
-    year_econ: int | None = None
-    if item.get("year") is not None:
-        try:
-            year_econ = int(item.get("year"))
-        except (TypeError, ValueError):
-            year_econ = None
+    year_econ = year
 
     mileage_for_flip: int | None = None
     mileage_raw = item.get("mileage")

@@ -5,6 +5,9 @@
 const VIEW_STORAGE_KEY = 'inventory_view';
 const SORT_DESC_KEY = 'inventory_sort_desc';
 const PAGE_SIZE = 30;
+const LOCATION_NOT_SPECIFIED = '__not_specified__';
+const LOCATION_NOT_SPECIFIED_LABEL = 'Not specified';
+const MAX_CAROUSEL_DOTS = 7;
 const YEAR_GAP = 1;
 const PRICE_GAP = 100;
 const MILEAGE_GAP = 500;
@@ -14,7 +17,6 @@ let currentResults = [];
 let listTotal = 0;
 let inventoryMeta = null;
 let sortDesc = true;
-let globalSearchTimer = null;
 
 /** @type {{ countries: Set<string>, regions: Set<string>, cities: Set<string> }} */
 const locSelection = {
@@ -297,10 +299,15 @@ function updateLocationTriggerLabels() {
 function summarizeSet(set, kind) {
     const n = set.size;
     if (!n) return 'Any';
+    const named = Array.from(set).filter((v) => v !== LOCATION_NOT_SPECIFIED);
+    const hasNs = set.has(LOCATION_NOT_SPECIFIED);
     if (n === 1) {
-        const v = Array.from(set)[0];
+        if (hasNs) return LOCATION_NOT_SPECIFIED_LABEL;
+        const v = named[0];
         return v.length > 22 ? `${v.slice(0, 20)}…` : v;
     }
+    if (hasNs && named.length === 0) return LOCATION_NOT_SPECIFIED_LABEL;
+    if (hasNs) return `${named.length} + ${LOCATION_NOT_SPECIFIED_LABEL}`;
     return `${n} ${kind}${n === 1 ? '' : 's'}`;
 }
 
@@ -309,11 +316,21 @@ function summarizeCityButton() {
     if (!n) return 'Any';
     if (n === 1) {
         const k = Array.from(locSelection.cities)[0];
+        if (k === LOCATION_NOT_SPECIFIED) return LOCATION_NOT_SPECIFIED_LABEL;
         const parts = k.split('|');
         const name = parts[2] || k;
         return name.length > 22 ? `${name.slice(0, 20)}…` : name;
     }
-    return `${n} cities`;
+    return summarizeSet(locSelection.cities, 'city');
+}
+
+function locationNotSpecifiedCheckboxRow(kind, checked) {
+    return `
+        <label class="filter-select-row filter-select-row--not-specified">
+            <input type="checkbox" class="filter-select-input" data-loc-kind="${kind}" value="${LOCATION_NOT_SPECIFIED}" ${checked ? 'checked' : ''} />
+            <span class="filter-select-text">${escapeHtml(LOCATION_NOT_SPECIFIED_LABEL)}</span>
+            <span class="filter-select-tick" aria-hidden="true"></span>
+        </label>`;
 }
 
 function getAvailableRegionsList() {
@@ -347,46 +364,14 @@ function getAvailableCityRows() {
 function pruneLocationChildren() {
     const validRegions = new Set(getAvailableRegionsList());
     for (const r of Array.from(locSelection.regions)) {
+        if (r === LOCATION_NOT_SPECIFIED) continue;
         if (!validRegions.has(r)) locSelection.regions.delete(r);
     }
     const validCities = new Set(getAvailableCityRows().map((row) => row.full));
     for (const c of Array.from(locSelection.cities)) {
+        if (c === LOCATION_NOT_SPECIFIED) continue;
         if (!validCities.has(c)) locSelection.cities.delete(c);
     }
-}
-
-/** When a tier has one option, select it by default; user can still uncheck (onlyIfEmpty avoids re-select after manual clear). */
-function applyLocationSingletonDefaults({ tiers = ['country', 'region', 'city'], onlyIfEmpty = true } = {}) {
-    if (!inventoryMeta) return false;
-    let changed = false;
-
-    if (tiers.includes('country')) {
-        const list = inventoryMeta.countries || [];
-        if (list.length === 1 && (!onlyIfEmpty || locSelection.countries.size === 0)) {
-            locSelection.countries.add(list[0]);
-            changed = true;
-        }
-    }
-    if (tiers.includes('region') && locSelection.countries.size > 0) {
-        const list = getAvailableRegionsList();
-        if (list.length === 1 && (!onlyIfEmpty || locSelection.regions.size === 0)) {
-            locSelection.regions.add(list[0]);
-            changed = true;
-        }
-    }
-    if (tiers.includes('city') && locSelection.regions.size > 0) {
-        const rows = getAvailableCityRows();
-        if (rows.length === 1 && (!onlyIfEmpty || locSelection.cities.size === 0)) {
-            locSelection.cities.add(rows[0].full);
-            changed = true;
-        }
-    }
-    if (changed) {
-        updateLocationTriggerLabels();
-        updateLocationTierUi();
-        updateRadiusAvailability();
-    }
-    return changed;
 }
 
 function updateLocationTierUi() {
@@ -448,24 +433,29 @@ function openLocationPanel(triggerId, panelId) {
 function renderCountryPanel() {
     const container = document.getElementById('filterCountryChecks');
     if (!container || !inventoryMeta) return;
-    const countries = inventoryMeta.countries || [];
-    container.innerHTML = countries
-        .map(
-            (c) => `
+    const countries = (inventoryMeta.countries || []).filter((c) => c !== LOCATION_NOT_SPECIFIED);
+    const nsRow =
+        inventoryMeta.location_not_specified?.country
+            ? locationNotSpecifiedCheckboxRow('country', locSelection.countries.has(LOCATION_NOT_SPECIFIED))
+            : '';
+    container.innerHTML =
+        nsRow +
+        countries
+            .map(
+                (c) => `
         <label class="filter-select-row">
             <input type="checkbox" class="filter-select-input" data-loc-kind="country" value="${escapeAttr(c)}" ${locSelection.countries.has(c) ? 'checked' : ''} />
             <span class="filter-select-text">${escapeHtml(c)}</span>
             <span class="filter-select-tick" aria-hidden="true"></span>
         </label>`
-        )
-        .join('');
+            )
+            .join('');
     wireLocationCheckboxes(container, 'country', () => {
         if (locSelection.countries.size === 0) {
             locSelection.regions.clear();
             locSelection.cities.clear();
         } else {
             pruneLocationChildren();
-            applyLocationSingletonDefaults({ tiers: ['region', 'city'], onlyIfEmpty: true });
         }
         refreshRegionOptions();
         refreshCityOptions();
@@ -482,22 +472,27 @@ function renderRegionPanel() {
         return;
     }
     const sorted = getAvailableRegionsList();
-    container.innerHTML = sorted
-        .map(
-            (r) => `
+    const nsRow =
+        inventoryMeta.location_not_specified?.region
+            ? locationNotSpecifiedCheckboxRow('region', locSelection.regions.has(LOCATION_NOT_SPECIFIED))
+            : '';
+    container.innerHTML =
+        nsRow +
+        sorted
+            .map(
+                (r) => `
         <label class="filter-select-row">
             <input type="checkbox" class="filter-select-input" data-loc-kind="region" value="${escapeAttr(r)}" ${locSelection.regions.has(r) ? 'checked' : ''} />
             <span class="filter-select-text">${escapeHtml(r)}</span>
             <span class="filter-select-tick" aria-hidden="true"></span>
         </label>`
-        )
-        .join('');
+            )
+            .join('');
     wireLocationCheckboxes(container, 'region', () => {
         if (locSelection.regions.size === 0) {
             locSelection.cities.clear();
         } else {
             pruneLocationChildren();
-            applyLocationSingletonDefaults({ tiers: ['city'], onlyIfEmpty: true });
         }
         refreshCityOptions();
         updateRadiusAvailability();
@@ -513,16 +508,22 @@ function renderCityPanel() {
         return;
     }
     const rows = getAvailableCityRows();
-    container.innerHTML = rows
-        .map(
-            ({ full, city }) => `
+    const nsRow =
+        inventoryMeta.location_not_specified?.city
+            ? locationNotSpecifiedCheckboxRow('city', locSelection.cities.has(LOCATION_NOT_SPECIFIED))
+            : '';
+    container.innerHTML =
+        nsRow +
+        rows
+            .map(
+                ({ full, city }) => `
         <label class="filter-select-row">
             <input type="checkbox" class="filter-select-input" data-loc-kind="city" value="${escapeAttr(full)}" ${locSelection.cities.has(full) ? 'checked' : ''} />
             <span class="filter-select-text">${escapeHtml(city)}</span>
             <span class="filter-select-tick" aria-hidden="true"></span>
         </label>`
-        )
-        .join('');
+            )
+            .join('');
     wireLocationCheckboxes(container, 'city', () => {
         updateRadiusAvailability();
         updateLocationTierUi();
@@ -802,7 +803,7 @@ function updateResultsHintAndLoadMore() {
     }
 }
 
-async function executeSearch({ append = false } = {}) {
+async function executeSearch({ append = false, syncEbay = false } = {}) {
     const list = document.getElementById('inventoryList');
     const hint = document.getElementById('inventoryResultsHint');
     const loadBtn = document.getElementById('loadMoreBtn');
@@ -810,7 +811,9 @@ async function executeSearch({ append = false } = {}) {
 
     if (!append) {
         list.style.opacity = '0.55';
-        list.innerHTML = '<div class="loading">Loading inventory…</div>';
+        list.innerHTML = syncEbay
+            ? '<div class="loading">Updating from eBay…</div>'
+            : '<div class="loading">Loading inventory…</div>';
     } else if (loadBtn) {
         loadBtn.dataset.loading = '1';
         loadBtn.disabled = true;
@@ -819,10 +822,15 @@ async function executeSearch({ append = false } = {}) {
 
     const query = new URL('/api/cars', window.location.origin);
     if (q) query.searchParams.set('q', q);
+    if (syncEbay) query.searchParams.set('sync_ebay', 'true');
 
     appendMultiParams(query, 'countries', Array.from(locSelection.countries));
     appendMultiParams(query, 'regions', Array.from(locSelection.regions));
     Array.from(locSelection.cities).forEach((key) => {
+        if (key === LOCATION_NOT_SPECIFIED) {
+            query.searchParams.append('cities', LOCATION_NOT_SPECIFIED);
+            return;
+        }
         const parts = key.split('|');
         if (parts.length === 3) query.searchParams.append('cities', parts[2]);
     });
@@ -888,6 +896,22 @@ async function executeSearch({ append = false } = {}) {
             window.location.replace('login.html');
             return;
         }
+        if (response.status === 429) {
+            let msg = 'eBay sync is on cooldown; showing saved listings.';
+            try {
+                const errBody = await response.json();
+                const sec = errBody?.detail?.retry_after_sec;
+                if (typeof sec === 'number') {
+                    msg = `eBay sync cooldown (${Math.ceil(sec)}s); showing saved listings.`;
+                }
+            } catch (_) {
+                /* ignore */
+            }
+            if (hint) hint.textContent = msg;
+            const fallbackUrl = new URL(query);
+            fallbackUrl.searchParams.delete('sync_ebay');
+            response = await fetch(fallbackUrl, { credentials: 'include' });
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json();
         const items = Array.isArray(payload.items) ? payload.items : [];
@@ -928,6 +952,32 @@ function attrEncode(s) {
         .replace(/'/g, '&#39;');
 }
 
+function carouselDotWindow(count, activeIndex) {
+    if (count <= MAX_CAROUSEL_DOTS) {
+        return { start: 0, end: count - 1 };
+    }
+    if (activeIndex <= 3) {
+        return { start: 0, end: MAX_CAROUSEL_DOTS - 1 };
+    }
+    if (activeIndex >= count - 4) {
+        return { start: count - MAX_CAROUSEL_DOTS, end: count - 1 };
+    }
+    return { start: activeIndex - 3, end: activeIndex + 3 };
+}
+
+function carouselDotsHtml(count, activeIndex) {
+    const win = carouselDotWindow(count, activeIndex);
+    let html = '';
+    for (let slideIdx = win.start; slideIdx <= win.end; slideIdx += 1) {
+        const edge =
+            count > MAX_CAROUSEL_DOTS &&
+            ((slideIdx === win.start && win.start > 0) || (slideIdx === win.end && win.end < count - 1));
+        const edgeCls = edge ? ' is-window-edge' : '';
+        html += `<button type="button" class="car-card-carousel-dot${edgeCls}" data-slide-to="${slideIdx}" aria-label="Photo ${slideIdx + 1}" aria-current="${slideIdx === activeIndex ? 'true' : 'false'}"></button>`;
+    }
+    return html;
+}
+
 function carouselHtml(car) {
     const imgs = car.images && car.images.length ? car.images : car.image_url ? [car.image_url] : [];
     if (!imgs.length) {
@@ -942,12 +992,6 @@ function carouselHtml(car) {
                 `<img class="car-card-carousel-img" src="${attrEncode(url)}" alt="" data-slide="${i}" loading="lazy" ${i === 0 ? '' : 'hidden'}>`
         )
         .join('');
-    const dots = imgs
-        .map(
-            (_, i) =>
-                `<button type="button" class="car-card-carousel-dot" data-slide-to="${i}" aria-label="Photo ${i + 1}" aria-current="${i === 0 ? 'true' : 'false'}"></button>`
-        )
-        .join('');
     const nav =
         imgs.length > 1
             ? `
@@ -957,7 +1001,7 @@ function carouselHtml(car) {
         <button type="button" class="car-card-carousel-nav car-card-carousel-nav--next" aria-label="Next photo">
             <svg class="car-card-carousel-nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
-        <div class="car-card-carousel-dots">${dots}</div>`
+        <div class="car-card-carousel-dots">${carouselDotsHtml(imgs.length, 0)}</div>`
             : '';
     return `<div class="car-card-carousel" data-carousel data-count="${imgs.length}">${slides}${nav}</div>`;
 }
@@ -1068,7 +1112,7 @@ function updateUI(items) {
                 <div class="car-card-body">
                     <div class="car-card-title-row">
                         <div class="car-card-title-year-col">
-                            <span class="car-year-pill">${car.year}</span>
+                            <span class="car-year-pill">${car.year != null ? escapeHtml(String(car.year)) : '—'}</span>
                         </div>
                         <span class="car-card-title-vrule" aria-hidden="true"></span>
                         <div class="car-card-title-main">
@@ -1114,14 +1158,14 @@ function updateUI(items) {
 
     list.querySelectorAll('[data-carousel]').forEach((root) => {
         const imgs = Array.from(root.querySelectorAll('.car-card-carousel-img'));
-        const dots = Array.from(root.querySelectorAll('.car-card-carousel-dot'));
         const count = imgs.length;
         if (count < 2) return;
         let idx = 0;
+        const dotsBox = root.querySelector('.car-card-carousel-dots');
         const show = (i) => {
             idx = (i + count) % count;
             imgs.forEach((img, j) => img.toggleAttribute('hidden', j !== idx));
-            dots.forEach((d, j) => d.setAttribute('aria-current', j === idx ? 'true' : 'false'));
+            if (dotsBox) dotsBox.innerHTML = carouselDotsHtml(count, idx);
         };
         root.querySelector('.car-card-carousel-nav--prev')?.addEventListener('click', (ev) => {
             ev.preventDefault();
@@ -1133,12 +1177,12 @@ function updateUI(items) {
             ev.stopPropagation();
             show(idx + 1);
         });
-        dots.forEach((d) => {
-            d.addEventListener('click', (ev) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                show(Number(d.dataset.slideTo));
-            });
+        dotsBox?.addEventListener('click', (ev) => {
+            const d = ev.target.closest('.car-card-carousel-dot');
+            if (!d) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            show(Number(d.dataset.slideTo));
         });
     });
 }
@@ -1148,7 +1192,8 @@ function showCarDetails(car) {
     const header = document.getElementById('modalHeader');
     const content = document.getElementById('modalContent');
 
-    header.textContent = `${car.brand} ${car.model} (${car.year})`;
+    header.textContent =
+        car.year != null ? `${car.brand} ${car.model} (${car.year})` : `${car.brand} ${car.model}`;
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:16px;">
@@ -1186,14 +1231,12 @@ function hideModal() {
 }
 
 function resetFilters() {
-    document.getElementById('globalSearchInput').value = '';
     document.querySelectorAll('.filter-chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
     document.getElementById('filterMinRoi').value = '';
     document.getElementById('filterMinProfit').value = '';
     makeSelection.clear();
     clearLocationSelections();
     if (inventoryMeta) populateMetaIntoUi(inventoryMeta);
-    applyLocationSingletonDefaults({ onlyIfEmpty: true });
     refreshRegionOptions();
     refreshCityOptions();
     updateRadiusAvailability();
@@ -1204,13 +1247,10 @@ function resetFilters() {
     executeSearch({ append: false });
 }
 
-function scheduleGlobalSearch() {
-    clearTimeout(globalSearchTimer);
-    globalSearchTimer = setTimeout(() => executeSearch({ append: false }), 380);
-}
-
 function initEventListeners() {
-    document.getElementById('applyFiltersBtn')?.addEventListener('click', () => executeSearch({ append: false }));
+    document
+        .getElementById('applyFiltersBtn')
+        ?.addEventListener('click', () => executeSearch({ append: false, syncEbay: false }));
     document.getElementById('resetFiltersBtn')?.addEventListener('click', resetFilters);
     document.getElementById('loadMoreBtn')?.addEventListener('click', () => executeSearch({ append: true }));
     document.getElementById('viewListBtn')?.addEventListener('click', () => setViewMode('list'));
@@ -1221,13 +1261,13 @@ function initEventListeners() {
     document.getElementById('itemModal')?.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) hideModal();
     });
-    document.getElementById('globalSearchBtn')?.addEventListener('click', () => executeSearch({ append: false }));
-    document.getElementById('globalSearchInput')?.addEventListener('input', scheduleGlobalSearch);
+    document
+        .getElementById('globalSearchBtn')
+        ?.addEventListener('click', () => executeSearch({ append: false, syncEbay: true }));
     document.getElementById('globalSearchInput')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            clearTimeout(globalSearchTimer);
-            executeSearch({ append: false });
+            executeSearch({ append: false, syncEbay: true });
         }
     });
 
@@ -1254,14 +1294,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const meta = await fetchMeta();
     if (meta) populateMetaIntoUi(meta);
-    const skipAutoCountry = meta && meta.inventory_source === 'ebay';
-    if (!skipAutoCountry) {
-        applyLocationSingletonDefaults({ onlyIfEmpty: true });
-    }
     refreshRegionOptions();
     refreshCityOptions();
     updateRadiusAvailability();
     updateLocationTierUi();
 
-    executeSearch({ append: false });
+    await executeSearch({ append: false, syncEbay: true });
+    const metaAfterSync = await fetchMeta();
+    if (metaAfterSync) {
+        populateMetaIntoUi(metaAfterSync);
+        refreshRegionOptions();
+        refreshCityOptions();
+        updateRadiusAvailability();
+        updateLocationTierUi();
+    }
 });

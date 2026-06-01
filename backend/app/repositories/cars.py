@@ -4,7 +4,7 @@ import difflib
 import logging
 import re
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -13,11 +13,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.config import in_memory_demo_enabled
 from app.demo_seed import build_in_memory_demo_car_views, pick_media_urls_for_car
 from app.integrations.ebay.client import get_ebay_client
-from app.integrations.ebay.inventory import (
-    fetch_ebay_inventory_views,
-    invalidate_ebay_inventory_cache,
-    resolve_listing_url,
-)
+from app.integrations.ebay.inventory import invalidate_ebay_inventory_cache, resolve_listing_url
 from app.integrations.ebay.parse_item import is_plausible_odometer
 from app.models.car import Car
 from app.services.body_style import (
@@ -92,12 +88,44 @@ def _resolve_mileage_meta_bounds(cars: list, *, inventory_source: str) -> tuple[
 
 _US_COUNTRY_ALIASES = frozenset({"united states", "us", "usa", "u.s.", "u.s.a."})
 
+LOCATION_NOT_SPECIFIED = "__not_specified__"
+
 
 def _normalize_country_key(value: str) -> str:
     v = (value or "").strip().lower()
     if v in _US_COUNTRY_ALIASES:
         return "united states"
     return v
+
+
+def _is_location_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    v = str(value).strip()
+    return not v or v == "—" or v.lower() in ("not specified", "unknown")
+
+
+def _country_is_unknown(car: Any) -> bool:
+    loc = getattr(car, "location", None)
+    return loc is None or _is_location_blank(loc.country)
+
+
+def _region_is_unknown(car: Any) -> bool:
+    loc = getattr(car, "location", None)
+    if loc is None or _is_location_blank(loc.country):
+        return False
+    return _is_location_blank(loc.region)
+
+
+def _city_is_unknown(car: Any) -> bool:
+    loc = getattr(car, "location", None)
+    if loc is None or _is_location_blank(loc.country) or _is_location_blank(loc.region):
+        return False
+    return _is_location_blank(loc.city)
+
+
+def _wants_not_specified(values: list[str]) -> bool:
+    return any(v == LOCATION_NOT_SPECIFIED or v == "__not_specified__" for v in values)
 
 
 def _listing_ends_at_iso(value: Any) -> str | None:
@@ -132,21 +160,10 @@ def _get_cached_in_memory_cars() -> list[Any]:
     return _in_memory_demo_cache
 
 
-def _ebay_inventory_for_query(query: str | None) -> list[Any]:
-    """Live eBay sandbox/prod listings in memory only (never written to DB)."""
-    views = fetch_ebay_inventory_views(query)
-    if views:
-        return views
-    if in_memory_demo_enabled():
-        logger.info("eBay unavailable or empty; falling back to demo catalog")
-        return list(_get_cached_in_memory_cars())
-    logger.warning("eBay returned no vehicle listings (demo disabled); inventory will be empty")
-    return []
-
-
-def _cars_for_inventory(db: Session, *, inventory_query: str | None = None) -> list[Any]:
-    if _stored_cars_exist(db):
-        return db.scalars(
+def load_inventory_cars_from_db(db: Session) -> list[Car]:
+    """Load all inventory rows from MySQL (hybrid mode: UI reads only from here)."""
+    return list(
+        db.scalars(
             select(Car)
             .options(
                 joinedload(Car.external_seller),
@@ -157,18 +174,30 @@ def _cars_for_inventory(db: Session, *, inventory_query: str | None = None) -> l
             )
             .order_by(Car.id)
         ).all()
-    if get_ebay_client().is_configured():
-        return _ebay_inventory_for_query(inventory_query)
-    if in_memory_demo_enabled():
-        if not get_ebay_client().is_configured():
-            logger.warning("eBay credentials missing; serving in-memory demo catalog")
-        return list(_get_cached_in_memory_cars())
-    logger.warning("eBay not configured and demo disabled; inventory empty")
-    return []
+    )
 
 
 def iter_cars(db: Session, *, inventory_query: str | None = None):
-    return _cars_for_inventory(db, inventory_query=inventory_query)
+    del inventory_query  # eBay ingest is explicit via sync_ebay_inventory
+    return load_inventory_cars_from_db(db)
+
+
+def _listing_is_active(car: Any, *, now: datetime | None = None) -> bool:
+    """Exclude ended auctions from user-facing inventory."""
+    ends = getattr(car, "listing_ends_at", None)
+    if ends is None:
+        return True
+    if isinstance(ends, str):
+        try:
+            ends = datetime.fromisoformat(ends.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+    if isinstance(ends, datetime):
+        ref = now or datetime.now(timezone.utc)
+        if ends.tzinfo is None:
+            ends = ends.replace(tzinfo=timezone.utc)
+        return ends > ref
+    return True
 
 
 def _latest_aspects_json(car: Car) -> Any:
@@ -395,6 +424,8 @@ def apply_filters(
 
     results: list[dict[str, Any]] = []
     for car in cars:
+        if not _listing_is_active(car):
+            continue
         if makes_l:
             if car.brand.strip().lower() not in makes_l:
                 continue
@@ -402,10 +433,13 @@ def apply_filters(
             continue
         if model and model.lower() not in car.model.lower():
             continue
-        if min_year and car.year < min_year:
-            continue
-        if max_year and car.year > max_year:
-            continue
+        if min_year is not None or max_year is not None:
+            if car.year is None:
+                continue
+            if min_year is not None and car.year < min_year:
+                continue
+            if max_year is not None and car.year > max_year:
+                continue
 
         mi = _effective_mileage(car)
         if min_mileage is not None and mi < min_mileage:
@@ -427,17 +461,42 @@ def apply_filters(
 
         loc = car.location
         if countries_l:
-            cc = _normalize_country_key((loc.country or "") if loc else "")
-            allowed_countries = {_normalize_country_key(c) for c in countries_l}
-            if cc not in allowed_countries:
+            want_unknown = _wants_not_specified(countries_l)
+            allowed_countries = {
+                _normalize_country_key(c)
+                for c in countries_l
+                if c not in (LOCATION_NOT_SPECIFIED, "__not_specified__")
+            }
+            is_unknown = _country_is_unknown(car)
+            cc = "" if is_unknown else _normalize_country_key((loc.country or "") if loc else "")
+            ok = bool(want_unknown and is_unknown)
+            if not is_unknown and cc in allowed_countries:
+                ok = True
+            if not ok:
                 continue
         if regions_l:
-            rr = (loc.region or "").strip().lower() if loc else ""
-            if rr not in regions_l:
+            want_unknown = _wants_not_specified(regions_l)
+            allowed_regs = {
+                r for r in regions_l if r not in (LOCATION_NOT_SPECIFIED, "__not_specified__")
+            }
+            is_unknown = _region_is_unknown(car)
+            rr = (loc.region or "").strip().lower() if loc and not is_unknown else ""
+            ok = bool(want_unknown and is_unknown)
+            if not is_unknown and rr in allowed_regs:
+                ok = True
+            if not ok:
                 continue
         if cities_l:
-            ci = (loc.city or "").strip().lower() if loc else ""
-            if ci not in cities_l:
+            want_unknown = _wants_not_specified(cities_l)
+            allowed_cities = {
+                c for c in cities_l if c not in (LOCATION_NOT_SPECIFIED, "__not_specified__")
+            }
+            is_unknown = _city_is_unknown(car)
+            ci = (loc.city or "").strip().lower() if loc and not is_unknown else ""
+            ok = bool(want_unknown and is_unknown)
+            if not is_unknown and ci in allowed_cities:
+                ok = True
+            if not ok:
                 continue
 
         if use_radius:
@@ -568,19 +627,17 @@ def apply_filters(
 
 def compute_inventory_meta(db: Session) -> dict[str, Any]:
     """Aggregate bounds and location hierarchy for filter UI (no auth logic here)."""
-    inventory_source = "empty"
     if _stored_cars_exist(db):
         inventory_source = "database"
-        cars = _cars_for_inventory(db, inventory_query=None)
+        cars = load_inventory_cars_from_db(db)
     elif get_ebay_client().is_configured():
-        inventory_source = "ebay"
-        # Filter UI only (countries/regions/cities + slider bounds): demo catalog, no live eBay call.
-        # INVENTORY_MODE=ebay_only hides demo from /cars but meta still needs location options.
-        cars = list(_get_cached_in_memory_cars())
+        inventory_source = "database"
+        cars = []
     elif in_memory_demo_enabled():
         inventory_source = "demo"
         cars = list(_get_cached_in_memory_cars())
     else:
+        inventory_source = "empty"
         cars = []
 
     if not cars:
@@ -603,15 +660,17 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
             "listing_formats": [],
             "makes": [],
             "vehicle_titles": [],
+            "location_not_specified": {"country": False, "region": False, "city": False},
         }
 
-    year_lo, year_hi = _year_slider_bounds()
-    if inventory_source == "ebay":
-        (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
+    year_values = [int(c.year) for c in cars if getattr(c, "year", None) is not None]
+    if year_values:
+        year_lo, year_hi = min(year_values), max(year_values)
     else:
-        prices = [float(c.price) for c in cars]
-        price_lo, price_hi = _PRICE_SLIDER_MIN, max(prices)
-        mi_lo, mi_hi = _resolve_mileage_meta_bounds(cars, inventory_source=inventory_source)
+        year_lo, year_hi = _year_slider_bounds()
+    prices = [float(c.price) for c in cars]
+    price_lo, price_hi = _PRICE_SLIDER_MIN, max(prices)
+    mi_lo, mi_hi = _resolve_mileage_meta_bounds(cars, inventory_source=inventory_source)
 
     conditions_set: set[str] = set()
     body_styles_set: set[str] = set()
@@ -622,6 +681,7 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
     regions_by_country: dict[str, set[str]] = {}
     cities_by_region: dict[str, set[str]] = {}
     anchors: dict[str, dict[str, Any]] = {}
+    loc_ns = {"country": False, "region": False, "city": False}
 
     for car in cars:
         makes_set.add(car.brand.strip())
@@ -638,21 +698,37 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
         if vt and str(vt).strip():
             titles_set.add(str(vt).strip())
 
+        if _country_is_unknown(car):
+            loc_ns["country"] = True
+            continue
+
         loc = car.location
         if not loc:
+            loc_ns["country"] = True
             continue
+
         co = (loc.country or "").strip()
+        if not co:
+            loc_ns["country"] = True
+            continue
+        countries.add(co)
+
+        if _is_location_blank(loc.region):
+            loc_ns["region"] = True
+            continue
+
         reg = (loc.region or "").strip()
+        regions_by_country.setdefault(co, set()).add(reg)
+
+        if _is_location_blank(loc.city):
+            loc_ns["city"] = True
+            continue
+
         city = (loc.city or "").strip()
-        if co:
-            countries.add(co)
-        if co and reg:
-            regions_by_country.setdefault(co, set()).add(reg)
-        if reg and city:
-            rkey = f"{co}|{reg}"
-            cities_by_region.setdefault(rkey, set()).add(city)
+        rkey = f"{co}|{reg}"
+        cities_by_region.setdefault(rkey, set()).add(city)
         pair = latlng_pair(loc.latitude, loc.longitude)
-        if pair and co and reg and city:
+        if pair:
             lat, lon = pair
             key = f"{co}|{reg}|{city}"
             anchors.setdefault(
@@ -689,4 +765,5 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
         "listing_formats": sorted(formats_set, key=str.lower),
         "makes": sorted(makes_set, key=str.lower),
         "vehicle_titles": sorted(titles_set, key=str.lower),
+        "location_not_specified": loc_ns,
     }

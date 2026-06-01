@@ -125,6 +125,57 @@ def _parse_year_from_title(title: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
+def _coerce_listing_year(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        y = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        m = _YEAR_RE.search(text)
+        if not m:
+            return None
+        y = int(m.group(1))
+    else:
+        try:
+            y = int(value)
+        except (TypeError, ValueError):
+            return None
+    if 1900 <= y <= 2039:
+        return y
+    return None
+
+
+def resolve_listing_year(
+    title: str | None,
+    *,
+    year_hint: Any = None,
+    aspects: Any = None,
+) -> Optional[int]:
+    """Best-effort model year; returns None instead of a placeholder when unknown."""
+    amap = _aspect_value_map(aspects) if aspects else {}
+    year_raw = _pick_aspect(amap, ("year",))
+    y = _coerce_listing_year(year_raw)
+    if y is not None:
+        return y
+    y = _coerce_listing_year(year_hint)
+    if y is not None:
+        return y
+    t = (title or "").strip()
+    if not t:
+        return None
+    parts = t.split()
+    if parts and _YEAR_RE.match(parts[0]):
+        return int(parts[0])
+    years = [int(m.group(1)) for m in _YEAR_RE.finditer(t)]
+    years = [yr for yr in years if 1900 <= yr <= 2039]
+    if not years:
+        return None
+    return min(years)
+
+
 def _normalize_listing_format_from_options(options: Any) -> str:
     if not isinstance(options, list) or not options:
         return "BUY_IT_NOW"
@@ -217,14 +268,7 @@ def parse_get_item(item: dict[str, Any]) -> dict[str, Any]:
 
     brand = _pick_aspect(amap, ("make",))
     model = _pick_aspect(amap, ("model",))
-    year_raw = _pick_aspect(amap, ("year",))
-    year = None
-    if year_raw:
-        ym = _YEAR_RE.search(year_raw)
-        if ym:
-            year = int(ym.group(1))
-    if year is None:
-        year = _parse_year_from_title(title)
+    year = resolve_listing_year(title, aspects=aspects_raw)
 
     mileage = _parse_mileage(_pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES)))
     vehicle_title = _pick_aspect(amap, tuple(_VEHICLE_TITLE_ASPECT_NAMES))
