@@ -18,6 +18,7 @@ let listTotal = 0;
 let inventoryMeta = null;
 let sortDesc = true;
 let lastDataMode = 'database';
+let auctionCountdownTimerId = null;
 
 /** Center of a 7-dot strip (the 4th dot, 1-based). */
 const CAROUSEL_DOTS_CENTER_IDX = 3;
@@ -132,10 +133,52 @@ function calculateHeatmapBorder(roi) {
 }
 
 /** Background + border for metrics block from ROI score. */
-function metricsBlockHeatStyle(roi) {
+function metricsBlockHeatStyle(roi, priceKnown = true) {
+    if (priceKnown === false || roi == null || Number.isNaN(Number(roi))) {
+        return 'background: var(--bg-page); border-color: var(--border-color);';
+    }
     const heat = calculateHeatmap(roi, 40, 58);
     const border = calculateHeatmapBorder(roi);
     return `background: color-mix(in srgb, ${heat} 22%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
+}
+
+function isPriceKnown(car) {
+    return car && car.price_known !== false;
+}
+
+function formatRoiDisplay(car) {
+    if (!isPriceKnown(car) || car.roi == null || Number.isNaN(Number(car.roi))) {
+        return 'Unable to determine';
+    }
+    return `${Number(car.roi).toFixed(1)}%`;
+}
+
+function formatProfitDisplay(car) {
+    if (!isPriceKnown(car) || car.net_profit == null || Number.isNaN(Number(car.net_profit))) {
+        return 'Unable to determine';
+    }
+    return formatMoney(car.net_profit);
+}
+
+function metricsBlockHtml(car) {
+    const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
+    if (!isPriceKnown(car)) {
+        return `<div class="car-card-metrics-compact car-card-metrics-compact--unknown" style="${metricsBlockHeatStyle(null, false)}">
+            <p class="car-card-metrics-unknown-msg">Unable to determine ROI and net profit</p>
+        </div>`;
+    }
+    const profitCls = profitValueClass(car.net_profit);
+    return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true)}">
+            <div class="car-card-metrics-col car-card-metrics-col--roi">
+                <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
+                <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${escapeHtml(formatRoiDisplay(car))}</span>
+            </div>
+            <span class="car-card-metrics-divider" aria-hidden="true"></span>
+            <div class="car-card-metrics-col car-card-metrics-col--profit">
+                <span class="car-card-metrics-col-label">Est. net profit</span>
+                <span class="car-card-metrics-col-value ${profitCls}">${escapeHtml(formatProfitDisplay(car))}</span>
+            </div>
+        </div>`;
 }
 
 function formatMoney(n) {
@@ -188,16 +231,50 @@ function normalizeListingFormatKey(raw) {
         .replace(/\s+/g, '_');
 }
 
-function formatAuctionTimeLeft(iso) {
+function formatAuctionCountdown(iso) {
     if (!iso) return '';
     const end = new Date(iso);
     if (Number.isNaN(end.getTime())) return '';
-    const ms = end.getTime() - Date.now();
+    const ms = Math.max(0, end.getTime() - Date.now());
     if (ms <= 0) return 'Ended';
-    const hours = Math.ceil(ms / 3_600_000);
-    if (hours < 24) return `${hours}h left`;
-    const days = Math.ceil(hours / 24);
-    return `${days}d left`;
+    const totalSec = Math.floor(ms / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    const time = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    if (days > 0) return `${days}d ${time}`;
+    return time;
+}
+
+function stopAuctionCountdownTimer() {
+    if (auctionCountdownTimerId != null) {
+        clearInterval(auctionCountdownTimerId);
+        auctionCountdownTimerId = null;
+    }
+}
+
+function tickAuctionCountdowns() {
+    document.querySelectorAll('#inventoryList [data-countdown-end]').forEach((el) => {
+        const iso = el.getAttribute('data-countdown-end');
+        if (!iso) return;
+        const end = new Date(iso);
+        if (Number.isNaN(end.getTime())) return;
+        if (end.getTime() <= Date.now()) {
+            el.textContent = 'Ended';
+            el.removeAttribute('data-countdown-end');
+            return;
+        }
+        el.textContent = formatAuctionCountdown(iso);
+    });
+}
+
+function ensureAuctionCountdownTimer() {
+    stopAuctionCountdownTimer();
+    if (!document.querySelector('#inventoryList [data-countdown-end]')) return;
+    tickAuctionCountdowns();
+    auctionCountdownTimerId = setInterval(tickAuctionCountdowns, 1000);
 }
 
 /** Footer meta next to price: { text, showSep } */
@@ -209,10 +286,20 @@ function formatListingMeta(car) {
     if (u === 'CLASSIFIED_AD') return { text: 'Classified Ad with Best Offer', showSep: true };
     if (u === 'AUCTION' || u.includes('AUCTION')) {
         const bids = car.bid_count != null ? Number(car.bid_count) : 0;
-        const left = formatAuctionTimeLeft(car.listing_ends_at);
-        const parts = [`${bids} bid${bids === 1 ? '' : 's'}`];
-        if (left) parts.push(left);
-        return { text: parts.join(' · '), showSep: true };
+        const bidLabel = `${bids} bid${bids === 1 ? '' : 's'}`;
+        if (car.auction_ended) {
+            return { text: bidLabel, showSep: true };
+        }
+        if (car.listing_ends_at) {
+            const left = formatAuctionCountdown(car.listing_ends_at);
+            return {
+                text: bidLabel,
+                countdownIso: car.listing_ends_at,
+                countdownText: left,
+                showSep: true,
+            };
+        }
+        return { text: bidLabel, showSep: true };
     }
     return { text: listingFormatLabel(car.listing_format), showSep: true };
 }
@@ -227,18 +314,45 @@ function carSubtitleLine(car) {
     return `${cond} · ${formatMileageLabel(car)}`;
 }
 
+function listingMetaHtml(meta) {
+    if (!meta.text && !meta.countdownIso) return '';
+    let inner = '';
+    if (meta.text) {
+        inner += meta.showSep
+            ? `<span class="car-card-listing-meta">${escapeHtml(meta.text)}</span>`
+            : `<span class="car-card-listing-meta car-card-listing-meta--inline">${escapeHtml(meta.text)}</span>`;
+    }
+    if (meta.countdownIso && meta.countdownText) {
+        if (inner) inner += '<span class="car-card-listing-meta"> · </span>';
+        inner += `<span class="car-card-auction-countdown" data-countdown-end="${escapeAttr(meta.countdownIso)}">${escapeHtml(meta.countdownText)}</span>`;
+    }
+    return inner;
+}
+
 function priceBlockHtml(car) {
     const meta = formatListingMeta(car);
     const sep =
-        meta.text && meta.showSep
+        (meta.text || meta.countdownIso) && meta.showSep
             ? '<span class="car-card-price-sep" aria-hidden="true">|</span>'
             : '';
-    const metaHtml = meta.text
-        ? meta.showSep
-            ? `<span class="car-card-listing-meta">${escapeHtml(meta.text)}</span>`
-            : `<span class="car-card-listing-meta car-card-listing-meta--inline">${escapeHtml(meta.text)}</span>`
-        : '';
+    const metaHtml = listingMetaHtml(meta);
+    if (car.auction_ended) {
+        return `<div class="car-card-price-block"><span class="car-card-auction-ended-pill">Auction ended</span>${sep}${metaHtml}</div>`;
+    }
+    if (!isPriceKnown(car)) {
+        return `<div class="car-card-price-block"><span class="car-card-price-unknown">Price unavailable</span>${sep}${metaHtml}</div>`;
+    }
     return `<div class="car-card-price-block"><span class="car-card-price">$${Number(car.price).toLocaleString()}</span>${sep}${metaHtml}</div>`;
+}
+
+function modalPurchasePriceHtml(car) {
+    if (car.auction_ended) {
+        return '<span class="car-card-auction-ended-pill car-card-auction-ended-pill--modal">Auction ended</span>';
+    }
+    if (!isPriceKnown(car)) {
+        return '<span class="car-card-price-unknown car-card-price-unknown--modal">Price unavailable</span>';
+    }
+    return `$${Number(car.price).toLocaleString()}`;
 }
 
 function buildChipGroup(containerId, items, getValue, getLabel) {
@@ -819,10 +933,14 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
     const q = document.getElementById('globalSearchInput')?.value.trim() || '';
 
     if (!append) {
+        stopAuctionCountdownTimer();
         list.style.opacity = '0.55';
+        list.setAttribute('aria-busy', 'true');
+        const loadingLabel = syncEbay ? 'Updating from eBay…' : 'Loading inventory…';
+        const spinner = '<span class="loading-spinner" aria-hidden="true"></span>';
         list.innerHTML = syncEbay
-            ? '<div class="loading">Updating from eBay…</div>'
-            : '<div class="loading">Loading inventory…</div>';
+            ? `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`
+            : `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`;
     } else if (loadBtn) {
         loadBtn.dataset.loading = '1';
         loadBtn.disabled = true;
@@ -895,6 +1013,14 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
     if (document.getElementById('filterExcludeNegativeProfit')?.checked) {
         query.searchParams.set('exclude_negative_profit', 'true');
     }
+    if (document.getElementById('filterExcludeEndedAuctions')?.checked !== false) {
+        query.searchParams.set('exclude_ended_auctions', 'true');
+    } else {
+        query.searchParams.set('exclude_ended_auctions', 'false');
+    }
+    if (document.getElementById('filterExcludeUnknownPrice')?.checked) {
+        query.searchParams.set('exclude_unknown_price', 'true');
+    }
 
     const sortBy = document.getElementById('frontendSortBy')?.value || 'roi';
     query.searchParams.set('sort_by', sortBy);
@@ -949,6 +1075,7 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
         if (!append) {
             requestAnimationFrame(() => scrollInventoryToTop());
         }
+        list.removeAttribute('aria-busy');
     } catch (err) {
         console.error('Search failed:', err);
         let recovered = false;
@@ -998,6 +1125,7 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
         }
     } finally {
         list.style.opacity = '1';
+        list.removeAttribute('aria-busy');
         if (loadBtn) {
             delete loadBtn.dataset.loading;
             loadBtn.textContent = 'Load more';
@@ -1245,15 +1373,13 @@ function specLines(car) {
 function updateUI(items) {
     const list = document.getElementById('inventoryList');
     if (items.length === 0) {
+        stopAuctionCountdownTimer();
         list.innerHTML = '<div class="no-results"><div>No matches. Try widening filters or search.</div></div>';
         return;
     }
 
     list.innerHTML = items
         .map((car) => {
-            const metricsStyle = metricsBlockHeatStyle(car.roi);
-            const profitCls = profitValueClass(car.net_profit);
-            const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
             return `
             <article class="car-card" data-car-id="${car.id}">
                 <div class="car-card-media">
@@ -1278,17 +1404,7 @@ function updateUI(items) {
                             ${priceBlockHtml(car)}
                             ${listingLinkHtml(car, 'car-card-listing-link car-card-listing-link--footer')}
                         </div>
-                        <div class="car-card-metrics-compact" style="${metricsStyle}">
-                            <div class="car-card-metrics-col car-card-metrics-col--roi">
-                                <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
-                                <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${Number(car.roi).toFixed(1)}%</span>
-                            </div>
-                            <span class="car-card-metrics-divider" aria-hidden="true"></span>
-                            <div class="car-card-metrics-col car-card-metrics-col--profit">
-                                <span class="car-card-metrics-col-label">Est. net profit</span>
-                                <span class="car-card-metrics-col-value ${profitCls}">${escapeHtml(formatMoney(car.net_profit))}</span>
-                            </div>
-                        </div>
+                        ${metricsBlockHtml(car)}
                     </div>
                 </div>
             </article>`;
@@ -1348,6 +1464,7 @@ function updateUI(items) {
         if (strip) strip.style.transform = 'translate3d(0, 0, 0)';
         applyCarouselDotsMode(dotsBox, carouselDotWindow(count, 0).mode);
     });
+    ensureAuctionCountdownTimer();
 }
 
 function showCarDetails(car) {
@@ -1363,32 +1480,38 @@ function showCarDetails(car) {
     const jsonDebugBtn = getSettings().showListingJsonDebug
         ? '<button type="button" class="modal-json-debug-btn" id="modalViewRawJsonBtn">View raw JSON</button>'
         : '';
+    const econKnown = isPriceKnown(car);
+    const resaleDisplay = econKnown ? `$${Number(car.resale_value).toLocaleString()}` : '—';
+    const repairDisplay = econKnown ? `$${Number(car.repair_cost).toLocaleString()}` : '—';
+    const metricsSection = econKnown
+        ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
+                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EST. NET PROFIT</div>
+                    <div style="font-size:24px;font-weight:700;color:${car.net_profit >= 0 ? 'var(--accent-green)' : '#ef4444'};">${escapeHtml(formatProfitDisplay(car))}</div>
+                </div>
+                <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
+                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">ROI</div>
+                    <div style="font-size:24px;font-weight:700;color:${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">${escapeHtml(formatRoiDisplay(car))}</div>
+                </div>
+            </div>`
+        : `<div style="background:var(--bg-page);padding:12px;border-radius:8px;">
+                <div style="color:var(--text-muted);font-size:13px;line-height:1.4;">Unable to determine ROI and net profit</div>
+            </div>`;
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:16px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">PURCHASE</div>
-                    <div style="font-size:20px;font-weight:700;">$${car.price.toLocaleString()}</div></div>
+                    <div style="font-size:20px;font-weight:700;">${modalPurchasePriceHtml(car)}</div></div>
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">RESALE</div>
-                    <div style="font-size:20px;font-weight:700;">$${car.resale_value.toLocaleString()}</div></div>
+                    <div style="font-size:20px;font-weight:700;">${resaleDisplay}</div></div>
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">REPAIR</div>
-                    <div style="font-size:20px;font-weight:700;">$${car.repair_cost.toLocaleString()}</div></div>
+                    <div style="font-size:20px;font-weight:700;">${repairDisplay}</div></div>
                 <div><div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">MILEAGE</div>
                     <div style="font-size:20px;font-weight:700;">${escapeHtml(mileageDisplay)}</div></div>
             </div>
             <div style="height:1px;background:var(--separator);"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
-                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EST. NET PROFIT</div>
-                    <div style="font-size:24px;font-weight:700;color:${car.net_profit >= 0 ? 'var(--accent-green)' : '#ef4444'};">
-                        ${car.net_profit >= 0 ? '+' : ''}$${car.net_profit.toLocaleString()}
-                    </div>
-                </div>
-                <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
-                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">ROI</div>
-                    <div style="font-size:24px;font-weight:700;color:${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">${car.roi}%</div>
-                </div>
-            </div>
+            ${metricsSection}
             ${listingLinkHtml(car, 'modal-listing-link')}
             ${jsonDebugBtn}
             <pre class="modal-raw-json" id="modalRawJsonPre" hidden></pre>
@@ -1435,6 +1558,10 @@ function resetFilters() {
     document.getElementById('filterMinProfit').value = '';
     const excludeProfit = document.getElementById('filterExcludeNegativeProfit');
     if (excludeProfit) excludeProfit.checked = false;
+    const excludeEnded = document.getElementById('filterExcludeEndedAuctions');
+    if (excludeEnded) excludeEnded.checked = true;
+    const excludeUnknownPrice = document.getElementById('filterExcludeUnknownPrice');
+    if (excludeUnknownPrice) excludeUnknownPrice.checked = false;
     makeSelection.clear();
     clearLocationSelections();
     if (inventoryMeta) populateMetaIntoUi(inventoryMeta);

@@ -1,5 +1,6 @@
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -31,6 +32,7 @@ class Car(Base):
     model = Column(String(100), nullable=False, index=True)
     year = Column(Integer, nullable=True, index=True)
     price = Column(Float, nullable=False, index=True)
+    price_known = Column(Boolean, nullable=False, server_default=text("1"))
     repair_cost = Column(Float, nullable=False, default=0)
     resale_value = Column(Float, nullable=False)
     mileage = Column(Integer, nullable=True)
@@ -50,6 +52,8 @@ class Car(Base):
         index=True,
     )
     listing_ends_at = Column(DateTime(timezone=True), nullable=True)
+    auction_ended_at = Column(DateTime(timezone=True), nullable=True)
+    ingest_search_key = Column(String(128), nullable=True, index=True)
     bid_count = Column(Integer, nullable=True)
     listing_format = Column(String(50), nullable=True)
     description_summary = Column(String(1024), nullable=True)

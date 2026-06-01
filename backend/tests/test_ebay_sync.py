@@ -94,6 +94,16 @@ def test_upsert_ebay_listing_insert(db):
     assert len(media) == 1
 
 
+def test_upsert_ebay_listing_unknown_price(db):
+    listing = _sample_listing()
+    listing["price"] = None
+    car = upsert_ebay_listing(db, listing)
+    db.commit()
+    assert car is not None
+    assert car.price_known is False
+    assert car.price == 0.0
+
+
 def test_upsert_ebay_listing_updates_duplicate(db):
     upsert_ebay_listing(db, _sample_listing(price=15000))
     db.commit()

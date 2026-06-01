@@ -17,6 +17,7 @@ from app.integrations.ebay.inventory import (
     resolve_listing_url,
 )
 from app.integrations.ebay.parse_item import resolve_listing_mileage, resolve_vehicle_facets
+from app.integrations.ebay.price import parse_listing_price
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.models.car import Car
 from app.models.car_satellite import (
@@ -26,7 +27,9 @@ from app.models.car_satellite import (
     VehicleAspectSnapshot,
 )
 from app.models.external_seller import ExternalSeller
+from app.repositories.cars import mark_expired_auctions
 from app.services.flip import estimate_flip_from_listing
+from app.services.search_query import normalize_search_key
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +183,9 @@ def _replace_car_children(db: Session, car: Car, item: dict[str, Any]) -> None:
         db.add(VehicleAspectSnapshot(car_id=car.id, aspects_json=aspects))
 
 
-def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
+def upsert_ebay_listing(
+    db: Session, item: dict[str, Any], *, ingest_search_key: str | None = None
+) -> Car | None:
     """Insert or update one normalized eBay listing row and satellites."""
     if item.get("error"):
         return None
@@ -191,12 +196,7 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
     if not title:
         return None
 
-    try:
-        price = float(item.get("price") or 0)
-    except (TypeError, ValueError):
-        price = 0.0
-    if price <= 0:
-        price = 1.0
+    price, price_known = parse_listing_price(item.get("price"))
 
     facets = resolve_vehicle_facets(
         title,
@@ -221,16 +221,19 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
     vtitle_raw = item.get("vehicle_title")
     vehicle_title_econ = (str(vtitle_raw).strip() if vtitle_raw is not None else None) or None
 
-    repair, resale = estimate_flip_from_listing(
-        price,
-        year=year_econ,
-        mileage=mileage_for_flip,
-        condition=condition_econ,
-        vehicle_title=vehicle_title_econ,
-        listing_format=item.get("listing_format") or "BUY_IT_NOW",
-        listing_id=ext_id,
-        title_text=title,
-    )
+    if price_known:
+        repair, resale = estimate_flip_from_listing(
+            price,
+            year=year_econ,
+            mileage=mileage_for_flip,
+            condition=condition_econ,
+            vehicle_title=vehicle_title_econ,
+            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            listing_id=ext_id,
+            title_text=title,
+        )
+    else:
+        repair, resale = 0.0, 0.0
 
     client = get_ebay_client()
     listing_url = resolve_listing_url(
@@ -258,6 +261,7 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
         "model": model[:100],
         "year": year,
         "price": price,
+        "price_known": price_known,
         "repair_cost": repair,
         "resale_value": resale,
         "mileage": mileage_for_flip,
@@ -276,6 +280,10 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
         "api_synced_at": now,
         "seller_item_revision": item.get("seller_item_revision"),
     }
+    if listing_ends is not None and listing_ends > now:
+        core["auction_ended_at"] = None
+    if ingest_search_key:
+        core["ingest_search_key"] = ingest_search_key[:128]
 
     if car is None:
         car = Car(**core)
@@ -329,6 +337,7 @@ def sync_ebay_inventory(
             "query": None,
         }
 
+    search_key = normalize_search_key(q)
     if enforce_cooldown:
         check_sync_cooldown(user_id)
 
@@ -340,7 +349,7 @@ def sync_ebay_inventory(
         for item in listings:
             try:
                 with db.begin_nested():
-                    if upsert_ebay_listing(db, item) is not None:
+                    if upsert_ebay_listing(db, item, ingest_search_key=search_key) is not None:
                         synced += 1
                     else:
                         skipped += 1
@@ -353,6 +362,7 @@ def sync_ebay_inventory(
                 skipped += 1
 
         try:
+            mark_expired_auctions(db)
             db.commit()
         except Exception as e:
             db.rollback()
@@ -371,9 +381,10 @@ def sync_ebay_inventory(
             mark_sync_completed(user_id)
 
         logger.info(
-            "eBay sync user=%s query=%r: %d upserted, %d skipped (api rows=%d)",
+            "eBay sync user=%s query=%r key=%r: %d upserted, %d skipped (api rows=%d)",
             user_id,
             search_q,
+            search_key,
             synced,
             skipped,
             len(listings),
@@ -384,6 +395,7 @@ def sync_ebay_inventory(
             "configured": True,
             "status": "ok",
             "query": search_q,
+            "query_key": search_key,
             "api_rows": len(listings),
         }
     except Exception as e:

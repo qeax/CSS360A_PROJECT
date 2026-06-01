@@ -14,10 +14,11 @@ from app.repositories.cars import (
     _q_tokens,
     apply_filters,
     compute_inventory_meta,
-    iter_cars,
+    load_inventory_for_request,
     sort_car_dicts_inplace,
 )
 from app.services.ebay_sync import EbaySyncCooldownError, sync_ebay_inventory
+from app.services.search_query import normalize_search_key
 
 router = APIRouter(tags=["cars"])
 
@@ -80,6 +81,8 @@ def get_cars(
     min_roi: Optional[float] = Query(None),
     exclude_negative_roi: bool = Query(False),
     exclude_negative_profit: bool = Query(False),
+    exclude_ended_auctions: bool = Query(True),
+    exclude_unknown_price: bool = Query(False),
     q: Optional[str] = Query(None),
     countries: Annotated[Optional[list[str]], Query()] = None,
     regions: Annotated[Optional[list[str]], Query()] = None,
@@ -129,7 +132,8 @@ def get_cars(
                 }
 
     try:
-        rows = iter_cars(db, inventory_query=q)
+        search_key = normalize_search_key(q)
+        rows = load_inventory_for_request(db, search_key=search_key)
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=503,
@@ -165,6 +169,8 @@ def get_cars(
         vehicle_titles=vehicle_titles,
         exclude_negative_roi=exclude_negative_roi,
         exclude_negative_profit=exclude_negative_profit or exclude_negative_roi,
+        exclude_ended_auctions=exclude_ended_auctions,
+        exclude_unknown_price=exclude_unknown_price,
     )
 
     effective_sort = sort_by

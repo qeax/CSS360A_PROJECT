@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import difflib
 import logging
-import re
-import unicodedata
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.config import in_memory_demo_enabled
@@ -25,8 +23,9 @@ from app.services.body_style import (
     extract_body_style_from_aspects_json,
     extract_drive_type_from_aspects_json,
 )
-from app.services.flip import calculate_flip_score
+from app.services.flip import calculate_flip_score, flip_metrics_unknown
 from app.services.geo import haversine_km, latlng_pair
+from app.services.search_query import meaningful_query_tokens, normalize_search_key
 
 _in_memory_demo_cache: list[Any] | None = None
 
@@ -211,21 +210,38 @@ def _get_cached_in_memory_cars() -> list[Any]:
     return _in_memory_demo_cache
 
 
-def load_inventory_cars_from_db(db: Session) -> list[Car]:
-    """Load all inventory rows from MySQL (hybrid mode: UI reads only from here)."""
-    return list(
-        db.scalars(
-            select(Car)
-            .options(
-                joinedload(Car.external_seller),
-                joinedload(Car.location),
-                joinedload(Car.listing_terms),
-                selectinload(Car.media),
-                selectinload(Car.aspect_snapshots),
-            )
-            .order_by(Car.id)
-        ).all()
+def load_inventory_cars_from_db(db: Session, *, search_key: str | None = None) -> list[Car]:
+    """Load inventory rows from MySQL; optionally scope eBay rows to a search key."""
+    stmt = (
+        select(Car)
+        .options(
+            joinedload(Car.external_seller),
+            joinedload(Car.location),
+            joinedload(Car.listing_terms),
+            selectinload(Car.media),
+            selectinload(Car.aspect_snapshots),
+        )
+        .order_by(Car.id)
     )
+    if search_key:
+        # Include legacy eBay rows (ingest_search_key NULL) — relevance via apply_filters text match.
+        stmt = stmt.where(
+            or_(
+                Car.source != "ebay",
+                Car.ingest_search_key == search_key,
+                Car.ingest_search_key.is_(None),
+            )
+        )
+    return list(db.scalars(stmt).all())
+
+
+def load_inventory_for_request(db: Session, *, search_key: str | None = None) -> list:
+    """DB inventory, or in-memory demo when the cars table is empty."""
+    if _stored_cars_exist(db):
+        return load_inventory_cars_from_db(db, search_key=search_key)
+    if in_memory_demo_enabled():
+        return list(_get_cached_in_memory_cars())
+    return []
 
 
 def iter_cars(db: Session, *, inventory_query: str | None = None):
@@ -233,22 +249,63 @@ def iter_cars(db: Session, *, inventory_query: str | None = None):
     return load_inventory_cars_from_db(db)
 
 
+def _parse_listing_ends_at(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            return None
+    return None
+
+
+def is_auction_listing(car: Any) -> bool:
+    fmt = _normalize_listing_format(getattr(car, "listing_format", None))
+    return fmt == "AUCTION"
+
+
+def auction_has_ended(car: Any, *, now: datetime | None = None) -> bool:
+    if not is_auction_listing(car):
+        return False
+    ends = _parse_listing_ends_at(getattr(car, "listing_ends_at", None))
+    if ends is None:
+        return False
+    ref = now or datetime.now(timezone.utc)
+    return ends <= ref
+
+
 def _listing_is_active(car: Any, *, now: datetime | None = None) -> bool:
-    """Exclude ended auctions from user-facing inventory."""
-    ends = getattr(car, "listing_ends_at", None)
+    """True when listing_ends_at is unset or still in the future."""
+    ends = _parse_listing_ends_at(getattr(car, "listing_ends_at", None))
     if ends is None:
         return True
-    if isinstance(ends, str):
-        try:
-            ends = datetime.fromisoformat(ends.replace("Z", "+00:00"))
-        except ValueError:
-            return True
-    if isinstance(ends, datetime):
-        ref = now or datetime.now(timezone.utc)
-        if ends.tzinfo is None:
-            ends = ends.replace(tzinfo=timezone.utc)
-        return ends > ref
-    return True
+    ref = now or datetime.now(timezone.utc)
+    return ends > ref
+
+
+def mark_expired_auctions(db: Session, *, now: datetime | None = None) -> int:
+    """Set auction_ended_at on auction rows whose end time has passed."""
+    ref = now or datetime.now(timezone.utc)
+    stmt = (
+        update(Car)
+        .where(
+            Car.listing_format.ilike("%AUCTION%"),
+            Car.listing_ends_at.isnot(None),
+            Car.listing_ends_at <= ref,
+            Car.auction_ended_at.is_(None),
+        )
+        .values(auction_ended_at=ref)
+    )
+    result = db.execute(stmt)
+    return int(result.rowcount or 0)
 
 
 def _latest_aspects_json(car: Car) -> Any:
@@ -321,12 +378,10 @@ def _normalize_listing_format(value: Optional[str]) -> str:
 
 
 def _q_tokens(q: Optional[str]) -> list[str]:
-    if not q or not isinstance(q, str):
-        return []
-    qn = unicodedata.normalize("NFKC", q).strip().lower()
-    if not qn:
-        return []
-    return [t for t in re.split(r"\s+", qn) if t]
+    """Raw lowercase tokens (used for default sort detection)."""
+    from app.services.search_query import split_query_tokens
+
+    return split_query_tokens(q)
 
 
 def _car_matches_q_soft(
@@ -345,6 +400,7 @@ def _car_matches_q_soft(
     description_summary: str,
     tokens: list[str],
 ) -> bool:
+    """Relevance match: phrase or all tokens (AND) in listing text fields."""
     if not tokens:
         return True
     haystack = " ".join(
@@ -352,27 +408,38 @@ def _car_matches_q_soft(
             brand.lower(),
             model.lower(),
             str(year),
-            city.lower(),
-            region.lower(),
-            country.lower(),
-            listing_format.lower(),
-            condition.lower(),
             (body_style or "").lower(),
             vehicle_title.lower(),
             (drive_type or "").lower(),
-            description_summary[:400].lower(),
+            condition.lower(),
+            listing_format.lower(),
+            description_summary[:512].lower(),
+            city.lower(),
+            region.lower(),
+            country.lower(),
         ]
     )
     full_phrase = " ".join(tokens)
     if full_phrase in haystack:
         return True
-    if any(t in haystack for t in tokens):
+    vehicle_text = " ".join(
+        [
+            brand.lower(),
+            model.lower(),
+            (body_style or "").lower(),
+            vehicle_title.lower(),
+            (drive_type or "").lower(),
+            description_summary[:512].lower(),
+        ]
+    )
+    if all(t in vehicle_text for t in tokens):
         return True
-    brand_model = f"{brand} {model}".lower()
-    if difflib.SequenceMatcher(None, brand_model, full_phrase).ratio() >= 0.55:
+    if all(t in haystack for t in tokens):
         return True
-    if difflib.SequenceMatcher(None, haystack[:240], full_phrase).ratio() >= 0.48:
-        return True
+    if len(tokens) <= 2:
+        brand_model = f"{brand} {model}".lower()
+        if difflib.SequenceMatcher(None, brand_model, full_phrase).ratio() >= 0.58:
+            return True
     return False
 
 
@@ -411,18 +478,52 @@ def _effective_radius_km(radius_km: Optional[float], radius_mi: Optional[float])
     return None
 
 
+def _metrics_unavailable(item: dict[str, Any]) -> bool:
+    """No purchase price → ROI/profit cannot be ranked (sort like zero / worst tier)."""
+    return not item.get("price_known", True)
+
+
+def _unknown_metrics_rank(item: dict[str, Any]) -> int:
+    return 1 if _metrics_unavailable(item) else 0
+
+
 def sort_car_dicts_inplace(
     results: list[dict[str, Any]], sort_by: Optional[str], sort_order: Optional[str]
 ) -> None:
     if not sort_by:
         return
     reverse_sort = (sort_order or "desc") == "desc"
+
+    def _profit_value(x: dict[str, Any]) -> float:
+        return float(x.get("net_profit") or 0.0)
+
+    def _roi_value(x: dict[str, Any]) -> float:
+        return float(x.get("roi") or 0.0)
+
+    def _price_value(x: dict[str, Any]) -> float:
+        return float(x.get("price") or 0.0)
+
     if sort_by == "net_profit":
-        results.sort(key=lambda x: x["net_profit"], reverse=reverse_sort)
+        results.sort(
+            key=lambda x: (
+                _unknown_metrics_rank(x),
+                -_profit_value(x) if reverse_sort else _profit_value(x),
+            ),
+        )
     elif sort_by == "price":
-        results.sort(key=lambda x: x["price"], reverse=reverse_sort)
+        results.sort(
+            key=lambda x: (
+                1 if not x.get("price_known", True) else 0,
+                -_price_value(x) if reverse_sort else _price_value(x),
+            ),
+        )
     elif sort_by == "roi":
-        results.sort(key=lambda x: x["roi"], reverse=reverse_sort)
+        results.sort(
+            key=lambda x: (
+                _unknown_metrics_rank(x),
+                -_roi_value(x) if reverse_sort else _roi_value(x),
+            ),
+        )
 
 
 def apply_filters(
@@ -454,8 +555,11 @@ def apply_filters(
     vehicle_titles: Optional[list[str]],
     exclude_negative_roi: bool = False,
     exclude_negative_profit: bool = False,
+    exclude_ended_auctions: bool = True,
+    exclude_unknown_price: bool = False,
 ) -> list:
-    q_toks = _q_tokens(q)
+    search_key = normalize_search_key(q)
+    q_toks = meaningful_query_tokens(q)
     countries_l = [c.strip().lower() for c in (countries or []) if c and str(c).strip()]
     regions_l = [r.strip().lower() for r in (regions or []) if r and str(r).strip()]
     cities_l = [c.strip().lower() for c in (cities or []) if c and str(c).strip()]
@@ -476,8 +580,16 @@ def apply_filters(
     use_radius = eff_radius_km is not None and anchor_lat is not None and anchor_lng is not None
 
     results: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
     for car in cars:
-        if not _listing_is_active(car):
+        active_by_date = _listing_is_active(car, now=now)
+        ended = auction_has_ended(car, now=now)
+        if not active_by_date:
+            if is_auction_listing(car) and ended and not exclude_ended_auctions:
+                pass
+            else:
+                continue
+        if exclude_ended_auctions and ended:
             continue
         disp_brand, disp_model, disp_year, disp_mileage = _vehicle_display_fields(car)
         if makes_l:
@@ -510,10 +622,16 @@ def apply_filters(
         elif condition and (not car.condition or condition.lower() not in cond_value):
             continue
 
-        if max_price is not None and car.price > max_price:
+        price_known = bool(getattr(car, "price_known", True))
+        if exclude_unknown_price and not price_known:
             continue
-        if min_price is not None and car.price < min_price:
-            continue
+        if max_price is not None or min_price is not None:
+            if not price_known:
+                continue
+            if max_price is not None and car.price > max_price:
+                continue
+            if min_price is not None and car.price < min_price:
+                continue
 
         loc = car.location
         if countries_l:
@@ -581,13 +699,23 @@ def apply_filters(
         if modes_l and not _delivery_matches_modes(car.listing_terms, modes_l):
             continue
 
-        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
-        if (exclude_negative_roi or exclude_negative_profit) and analysis["net_profit"] < 0:
-            continue
-        if min_profit is not None and analysis["net_profit"] < min_profit:
-            continue
-        if min_roi is not None and analysis["roi"] < min_roi:
-            continue
+        if price_known:
+            analysis = calculate_flip_score(
+                car.price, car.resale_value, car.repair_cost or 0, price_known=True
+            )
+        else:
+            analysis = flip_metrics_unknown()
+        if (exclude_negative_roi or exclude_negative_profit) and analysis.get(
+            "net_profit"
+        ) is not None:
+            if analysis["net_profit"] < 0:
+                continue
+        if min_profit is not None:
+            if analysis.get("net_profit") is None or analysis["net_profit"] < min_profit:
+                continue
+        if min_roi is not None:
+            if analysis.get("roi") is None or analysis["roi"] < min_roi:
+                continue
 
         mileage = mi
         drive_type = _drive_type_for_car(car)
@@ -625,7 +753,7 @@ def apply_filters(
             _normalize_listing_format(car.listing_format)
             or (car.listing_format or "").strip().lower()
         )
-        if not _car_matches_q_soft(
+        if q_toks and not _car_matches_q_soft(
             brand=disp_brand,
             model=disp_model,
             year=disp_year,
@@ -642,6 +770,13 @@ def apply_filters(
         ):
             continue
 
+        if search_key:
+            src = (getattr(car, "source", None) or "").strip().lower()
+            if src == "ebay":
+                ingest_key = getattr(car, "ingest_search_key", None)
+                if ingest_key and ingest_key != search_key:
+                    continue
+
         image_urls = _image_urls_for_car(car)
         src = (car.source or "manual").strip().lower()
         ebay_sandbox = get_ebay_client().sandbox if src == "ebay" else False
@@ -657,6 +792,7 @@ def apply_filters(
                 "model": disp_model,
                 "year": disp_year,
                 "price": car.price,
+                "price_known": price_known,
                 "repair_cost": car.repair_cost,
                 "resale_value": car.resale_value,
                 "mileage": mileage,
@@ -670,6 +806,7 @@ def apply_filters(
                 "external_listing_id": car.external_listing_id,
                 "listing_url": listing_url_out,
                 "listing_ends_at": listing_ends_at,
+                "auction_ended": ended,
                 "bid_count": car.bid_count,
                 "listing_format": _normalize_listing_format(car.listing_format)
                 or car.listing_format,

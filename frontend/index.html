@@ -180,6 +180,16 @@
                         <span class="filter-toggle-ui" aria-hidden="true"></span>
                         <span class="filter-toggle-label">Hide negative net profit</span>
                     </label>
+                    <label class="filter-toggle" for="filterExcludeEndedAuctions">
+                        <input type="checkbox" id="filterExcludeEndedAuctions" checked>
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide ended auctions</span>
+                    </label>
+                    <label class="filter-toggle" for="filterExcludeUnknownPrice">
+                        <input type="checkbox" id="filterExcludeUnknownPrice">
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide listings without price</span>
+                    </label>
                     <div class="input-group"><label for="filterMinRoi">Min ROI %</label><input type="number" id="filterMinRoi" placeholder="Any" step="0.1" min="0"></div>
                     <div class="input-group"><label for="filterMinProfit">Min net profit ($)</label><input type="number" id="filterMinProfit" placeholder="Any" step="100"></div>
                 </section>

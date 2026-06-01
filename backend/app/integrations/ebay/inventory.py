@@ -99,12 +99,9 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     title = (item.get("title") or "").strip()
     if not title:
         return None
-    try:
-        price = float(item.get("price") or 0)
-    except (TypeError, ValueError):
-        price = 0.0
-    if price <= 0:
-        price = 1.0
+    from app.integrations.ebay.price import parse_listing_price
+
+    price, price_known = parse_listing_price(item.get("price"))
 
     from app.integrations.ebay.parse_item import resolve_vehicle_facets
 
@@ -136,16 +133,19 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     display_condition = condition_econ or "Used"
     display_vehicle_title = vehicle_title_econ or "Not Specified"
 
-    repair, resale = estimate_flip_from_listing(
-        price,
-        year=year_econ,
-        mileage=mileage_for_flip,
-        condition=condition_econ,
-        vehicle_title=vehicle_title_econ,
-        listing_format=item.get("listing_format") or "BUY_IT_NOW",
-        listing_id=ext_id,
-        title_text=title,
-    )
+    if price_known:
+        repair, resale = estimate_flip_from_listing(
+            price,
+            year=year_econ,
+            mileage=mileage_for_flip,
+            condition=condition_econ,
+            vehicle_title=vehicle_title_econ,
+            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            listing_id=ext_id,
+            title_text=title,
+        )
+    else:
+        repair, resale = 0.0, 0.0
     client = get_ebay_client()
     listing_url = resolve_listing_url(
         ext_id,
@@ -204,6 +204,7 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
         model=model,
         year=year,
         price=price,
+        price_known=price_known,
         repair_cost=repair,
         resale_value=resale,
         mileage=mileage_for_flip,
