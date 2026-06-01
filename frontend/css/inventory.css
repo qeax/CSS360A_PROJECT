@@ -89,15 +89,35 @@
     height: 100%;
 }
 
+.car-card-carousel-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.car-card-carousel-strip {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+}
+
+.car-card-carousel-strip.is-anim-right {
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.car-card-carousel-strip.is-anim-left {
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .car-card-carousel-img {
+    flex: 0 0 100%;
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-}
-
-.car-card-carousel-img[hidden] {
-    display: none;
+    user-select: none;
 }
 
 .car-card-carousel-nav {
@@ -205,17 +225,13 @@ article.car-card:focus-within .car-card-carousel-dots {
 .car-card-carousel-dots {
     --carousel-dot-size: 6px;
     --carousel-dot-gap: 6px;
-    --carousel-dot-step: calc(var(--carousel-dot-size) + var(--carousel-dot-gap));
+    --carousel-dot-slot: 18px;
     --carousel-dots-visible: 7;
-    --carousel-dots-center-idx: 3;
 
     position: absolute;
     bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 5px 8px;
     border-radius: 999px;
     background: rgba(12, 14, 18, 0.42);
@@ -225,11 +241,19 @@ article.car-card:focus-within .car-card-carousel-dots {
 }
 
 .car-card-carousel-dots-viewport {
+    position: relative;
     width: calc(
         var(--carousel-dots-visible) * var(--carousel-dot-size) +
             (var(--carousel-dots-visible) - 1) * var(--carousel-dot-gap)
     );
     overflow: hidden;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dots-viewport {
+    width: calc(
+        var(--carousel-dots-visible) * var(--carousel-dot-slot) +
+            (var(--carousel-dots-visible) - 1) * var(--carousel-dot-gap)
+    );
 }
 
 .car-card-carousel-dots-track {
@@ -249,18 +273,41 @@ article.car-card:focus-within .car-card-carousel-dots {
     border-radius: 999px;
     background: #fff;
     pointer-events: none;
-    z-index: 1;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Middle: strip slides; 3 equal slots each side of center pointer */
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dots-center {
+    display: none;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot {
+    flex: 0 0 var(--carousel-dot-slot);
+    width: var(--carousel-dot-size);
+    margin: 0 auto;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"] {
+    width: var(--carousel-dot-slot);
+    height: var(--carousel-dot-size);
+    border-radius: 999px;
+    background: #fff;
+    opacity: 1;
 }
 
 .car-card-carousel-dot {
-    width: 6px;
-    height: 6px;
+    flex-shrink: 0;
+    width: var(--carousel-dot-size);
+    height: var(--carousel-dot-size);
     border-radius: 50%;
     border: none;
     padding: 0;
+    box-sizing: content-box;
     background: rgba(255, 255, 255, 0.45);
     cursor: pointer;
-    transition: background 0.2s, transform 0.2s, width 0.2s, border-radius 0.2s;
+    transition: background 0.2s, opacity 0.2s;
 }
 
 .car-card-carousel-dot:hover {
@@ -268,12 +315,16 @@ article.car-card:focus-within .car-card-carousel-dots {
 }
 
 .car-card-carousel-dot.is-window-edge {
-    opacity: 0.55;
-    transform: scale(0.85);
+    opacity: 0.45;
 }
 
-.car-card-carousel-dot[aria-current="true"] {
-    background: rgba(255, 255, 255, 0.92);
+/* Start/end: strip fixed, active dot is the moving pointer */
+.car-card-carousel-dots.is-carousel-edge .car-card-carousel-dot[aria-current="true"] {
+    width: 18px;
+    height: var(--carousel-dot-size);
+    border-radius: 999px;
+    background: #fff;
+    transition: background 0.2s, width 0.2s ease, border-radius 0.2s ease;
 }
 
 .car-card-carousel-dot:focus-visible {

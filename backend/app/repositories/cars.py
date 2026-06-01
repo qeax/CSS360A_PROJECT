@@ -14,7 +14,12 @@ from app.config import in_memory_demo_enabled
 from app.demo_seed import build_in_memory_demo_car_views, pick_media_urls_for_car
 from app.integrations.ebay.client import get_ebay_client
 from app.integrations.ebay.inventory import invalidate_ebay_inventory_cache, resolve_listing_url
-from app.integrations.ebay.parse_item import is_plausible_odometer
+from app.integrations.ebay.parse_item import (
+    _coerce_listing_year,
+    is_plausible_odometer,
+    resolve_listing_mileage,
+    resolve_vehicle_facets,
+)
 from app.models.car import Car
 from app.services.body_style import (
     extract_body_style_from_aspects_json,
@@ -52,6 +57,49 @@ def _listing_mileage_mi(car: Any) -> int | None:
     if is_plausible_odometer(mi):
         return mi
     return None
+
+
+def _raw_listing_dict(car: Any) -> dict[str, Any] | None:
+    raw = getattr(car, "raw_listing_json", None)
+    return raw if isinstance(raw, dict) else None
+
+
+def _listing_title(car: Any) -> str:
+    raw = _raw_listing_dict(car)
+    if raw:
+        title = (raw.get("title") or "").strip()
+        if title:
+            return title
+    return (getattr(car, "description_summary", None) or "").strip()
+
+
+def _vehicle_display_fields(car: Any) -> tuple[str, str, int | None, int | None]:
+    """Resolve brand/model/year/mileage for API output (DB + raw JSON + title)."""
+    raw = _raw_listing_dict(car)
+    title = _listing_title(car)
+    aspects = raw.get("aspects_json") if raw else None
+    facets = resolve_vehicle_facets(
+        title,
+        brand_hint=car.brand,
+        model_hint=car.model,
+        year_hint=car.year,
+        aspects=aspects,
+    )
+    mileage = _listing_mileage_mi(car)
+    if mileage is None:
+        mileage = resolve_listing_mileage(
+            title,
+            mileage_hint=raw.get("mileage") if raw else None,
+            aspects=aspects,
+        )
+    brand = facets["brand"] or car.brand
+    model = facets["model"] or car.model
+    year = facets["year"] if facets["year"] is not None else car.year
+    if year is None and _coerce_listing_year(car.brand or ""):
+        year = _coerce_listing_year(car.brand)
+        if brand == str(year):
+            brand = facets["brand"] or "Unknown"
+    return brand, model, year, mileage
 
 
 def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]:
@@ -405,6 +453,7 @@ def apply_filters(
     delivery_modes: Optional[list[str]],
     vehicle_titles: Optional[list[str]],
     exclude_negative_roi: bool = False,
+    exclude_negative_profit: bool = False,
 ) -> list:
     q_toks = _q_tokens(q)
     countries_l = [c.strip().lower() for c in (countries or []) if c and str(c).strip()]
@@ -430,22 +479,24 @@ def apply_filters(
     for car in cars:
         if not _listing_is_active(car):
             continue
+        disp_brand, disp_model, disp_year, disp_mileage = _vehicle_display_fields(car)
         if makes_l:
-            if car.brand.strip().lower() not in makes_l:
+            if disp_brand.strip().lower() not in makes_l:
                 continue
-        elif make and make.lower() not in car.brand.lower():
+        elif make and make.lower() not in disp_brand.lower():
             continue
-        if model and model.lower() not in car.model.lower():
+        if model and model.lower() not in disp_model.lower():
             continue
+
         if min_year is not None or max_year is not None:
-            if car.year is None:
+            if disp_year is None:
                 continue
-            if min_year is not None and car.year < min_year:
+            if min_year is not None and disp_year < min_year:
                 continue
-            if max_year is not None and car.year > max_year:
+            if max_year is not None and disp_year > max_year:
                 continue
 
-        mi = _listing_mileage_mi(car)
+        mi = disp_mileage
         if mi is not None:
             if min_mileage is not None and mi < min_mileage:
                 continue
@@ -531,7 +582,7 @@ def apply_filters(
             continue
 
         analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
-        if exclude_negative_roi and analysis["roi"] < 0:
+        if (exclude_negative_roi or exclude_negative_profit) and analysis["net_profit"] < 0:
             continue
         if min_profit is not None and analysis["net_profit"] < min_profit:
             continue
@@ -575,9 +626,9 @@ def apply_filters(
             or (car.listing_format or "").strip().lower()
         )
         if not _car_matches_q_soft(
-            brand=car.brand,
-            model=car.model,
-            year=car.year,
+            brand=disp_brand,
+            model=disp_model,
+            year=disp_year,
             city=city_s,
             region=region_s,
             country=country_s,
@@ -602,9 +653,9 @@ def apply_filters(
         results.append(
             {
                 "id": car.id,
-                "brand": car.brand,
-                "model": car.model,
-                "year": car.year,
+                "brand": disp_brand,
+                "model": disp_model,
+                "year": disp_year,
                 "price": car.price,
                 "repair_cost": car.repair_cost,
                 "resale_value": car.resale_value,

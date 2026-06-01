@@ -175,12 +175,13 @@
                 <hr class="filter-divider">
                 <section class="filter-section">
                     <h3 class="filter-heading">Profitability</h3>
+                    <label class="filter-toggle" for="filterExcludeNegativeProfit">
+                        <input type="checkbox" id="filterExcludeNegativeProfit">
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide negative net profit</span>
+                    </label>
                     <div class="input-group"><label for="filterMinRoi">Min ROI %</label><input type="number" id="filterMinRoi" placeholder="Any" step="0.1" min="0"></div>
                     <div class="input-group"><label for="filterMinProfit">Min net profit ($)</label><input type="number" id="filterMinProfit" placeholder="Any" step="100"></div>
-                    <label class="filter-checkbox">
-                        <input type="checkbox" id="filterExcludeNegativeRoi">
-                        Hide negative ROI
-                    </label>
                 </section>
             </div>
             <div class="filters-sidebar-footer">

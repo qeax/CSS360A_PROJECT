@@ -79,6 +79,7 @@ def get_cars(
     min_profit: Optional[float] = Query(None),
     min_roi: Optional[float] = Query(None),
     exclude_negative_roi: bool = Query(False),
+    exclude_negative_profit: bool = Query(False),
     q: Optional[str] = Query(None),
     countries: Annotated[Optional[list[str]], Query()] = None,
     regions: Annotated[Optional[list[str]], Query()] = None,
@@ -163,6 +164,7 @@ def get_cars(
         delivery_modes=delivery_modes,
         vehicle_titles=vehicle_titles,
         exclude_negative_roi=exclude_negative_roi,
+        exclude_negative_profit=exclude_negative_profit or exclude_negative_roi,
     )
 
     effective_sort = sort_by

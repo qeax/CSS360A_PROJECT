@@ -13,7 +13,7 @@ from app.integrations.ebay.get_item_mapping import (
     SELLER_JSON_KEYS,
 )
 
-_YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
+_YEAR_RE = re.compile(r"\b(19[0-9]\d|20[0-3]\d)\b")
 _MILEAGE_WITH_UNIT_RE = re.compile(
     r"([\d,]+)\s*(?:,\d{3})*\s*(?:mi|miles|mile)\b",
     re.IGNORECASE,
@@ -62,6 +62,8 @@ def _aspect_value_map(localized_aspects: Any) -> dict[str, str]:
             continue
         vals = entry.get("localizedAspectValues") or entry.get("values")
         picked = _first_str(vals)
+        if not picked:
+            picked = _first_str(entry.get("value"))
         if picked:
             out[name.strip().lower()] = picked
     return out
@@ -191,11 +193,22 @@ def resolve_vehicle_facets(
     """
     from app.integrations.ebay.inventory import _parse_brand_model
 
+    year_from_brand_hint: Optional[int] = None
+    if brand_hint is not None:
+        yb = _coerce_listing_year(brand_hint)
+        if yb is not None:
+            year_from_brand_hint = yb
+            brand_hint = None
+
     amap = _aspect_value_map(aspects) if aspects else {}
     make_raw = _pick_aspect(amap, ("make",))
     model_raw = _pick_aspect(amap, ("model",))
 
-    year = resolve_listing_year(title, year_hint=year_hint, aspects=aspects)
+    year = resolve_listing_year(
+        title,
+        year_hint=year_hint if year_hint is not None else year_from_brand_hint,
+        aspects=aspects,
+    )
 
     brand: Optional[str] = None
     if make_raw and not _coerce_listing_year(make_raw):
@@ -244,6 +257,26 @@ def resolve_vehicle_facets(
         "model": (model or "Listing")[:100],
         "year": year,
     }
+
+
+def resolve_listing_mileage(
+    title: str | None,
+    *,
+    mileage_hint: Any = None,
+    aspects: Any = None,
+) -> int | None:
+    """Best-effort odometer (mi) from hint, aspects, or title."""
+    if mileage_hint is not None:
+        if isinstance(mileage_hint, int) and is_plausible_odometer(mileage_hint):
+            return mileage_hint
+        parsed_hint = _parse_mileage(str(mileage_hint))
+        if parsed_hint is not None:
+            return parsed_hint
+    amap = _aspect_value_map(aspects) if aspects else {}
+    from_aspects = _parse_mileage(_pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES)))
+    if from_aspects is not None:
+        return from_aspects
+    return _parse_mileage(title)
 
 
 def _normalize_listing_format_from_options(options: Any) -> str:
@@ -344,7 +377,7 @@ def parse_get_item(item: dict[str, Any]) -> dict[str, Any]:
     model = facets["model"]
     year = facets["year"]
 
-    mileage = _parse_mileage(_pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES)))
+    mileage = resolve_listing_mileage(title, aspects=aspects_raw)
     vehicle_title = _pick_aspect(amap, tuple(_VEHICLE_TITLE_ASPECT_NAMES))
 
     cond = item.get("condition") or item.get("conditionDisplayName")

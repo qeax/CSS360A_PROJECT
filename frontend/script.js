@@ -20,7 +20,8 @@ let sortDesc = true;
 let lastDataMode = 'database';
 
 const CAROUSEL_DOTS_CENTER_IDX = 3;
-const CAROUSEL_DOT_STEP_PX = 12;
+/** Photos from start/end where only the pointer moves (strip stays put). */
+const CAROUSEL_EDGE_MARGIN = 3;
 
 /** @type {{ countries: Set<string>, regions: Set<string>, cities: Set<string> }} */
 const locSelection = {
@@ -892,8 +893,8 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
     const minProfit = document.getElementById('filterMinProfit')?.value.trim();
     if (minRoi) query.searchParams.set('min_roi', minRoi);
     if (minProfit) query.searchParams.set('min_profit', minProfit);
-    if (document.getElementById('filterExcludeNegativeRoi')?.checked) {
-        query.searchParams.set('exclude_negative_roi', 'true');
+    if (document.getElementById('filterExcludeNegativeProfit')?.checked) {
+        query.searchParams.set('exclude_negative_profit', 'true');
     }
 
     const sortBy = document.getElementById('frontendSortBy')?.value || 'roi';
@@ -903,7 +904,7 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
     query.searchParams.set('offset', String(append ? carData.length : 0));
 
     try {
-        const response = await fetch(query, { credentials: 'include' });
+        let response = await fetch(query, { credentials: 'include' });
         if (response.status === 401) {
             window.location.replace('login.html');
             return;
@@ -951,11 +952,51 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
         }
     } catch (err) {
         console.error('Search failed:', err);
+        let recovered = false;
         if (!append) {
-            list.innerHTML =
-                '<div class="no-results"><div>Connection error</div><div style="margin-top:8px;font-size:13px;">Unable to reach the server.</div></div>';
+            const fallbackUrl = new URL(query);
+            if (fallbackUrl.searchParams.has('sync_ebay')) {
+                fallbackUrl.searchParams.delete('sync_ebay');
+                try {
+                    const fbRes = await fetch(fallbackUrl, { credentials: 'include' });
+                    if (fbRes.status === 401) {
+                        window.location.replace('login.html');
+                        return;
+                    }
+                    if (fbRes.ok) {
+                        const payload = await fbRes.json();
+                        const items = Array.isArray(payload.items) ? payload.items : [];
+                        listTotal = typeof payload.total === 'number' ? payload.total : items.length;
+                        lastDataMode = 'database';
+                        carData = items;
+                        currentResults = carData;
+                        updateUI(currentResults);
+                        updateResultsHintAndLoadMore();
+                        if (hint) {
+                            hint.textContent =
+                                'Connection issue during eBay sync; showing saved listings (Database mode).';
+                        }
+                        recovered = true;
+                    }
+                } catch (fbErr) {
+                    console.error('DB fallback after connection error failed:', fbErr);
+                }
+            }
+            if (!recovered && carData.length > 0) {
+                lastDataMode = 'database';
+                updateUI(carData);
+                updateResultsHintAndLoadMore();
+                if (hint) {
+                    hint.textContent = 'Unable to refresh; showing last loaded listings (Database mode).';
+                }
+                recovered = true;
+            }
+            if (!recovered) {
+                list.innerHTML =
+                    '<div class="no-results"><div>Connection error</div><div style="margin-top:8px;font-size:13px;">Unable to reach the server.</div></div>';
+                if (hint) hint.textContent = '';
+            }
         }
-        if (hint) hint.textContent = '';
     } finally {
         list.style.opacity = '1';
         if (loadBtn) {
@@ -974,26 +1015,41 @@ function attrEncode(s) {
         .replace(/'/g, '&#39;');
 }
 
+/**
+ * Which dots are visible and whether the strip slides under a fixed center pointer.
+ * - edge-start / edge-end / short: strip fixed, pointer (active dot) moves along it
+ * - slide: pointer fixed at viewport center, strip window shifts with active slide
+ */
 function carouselDotWindow(count, activeIndex) {
     if (count <= MAX_CAROUSEL_DOTS) {
-        return { start: 0, end: count - 1 };
+        return { start: 0, end: count - 1, mode: 'short' };
     }
-    if (activeIndex <= 3) {
-        return { start: 0, end: MAX_CAROUSEL_DOTS - 1 };
+    if (activeIndex < CAROUSEL_EDGE_MARGIN) {
+        return { start: 0, end: MAX_CAROUSEL_DOTS - 1, mode: 'edge-start' };
     }
-    if (activeIndex >= count - 4) {
-        return { start: count - MAX_CAROUSEL_DOTS, end: count - 1 };
+    if (activeIndex >= count - CAROUSEL_EDGE_MARGIN) {
+        return {
+            start: count - MAX_CAROUSEL_DOTS,
+            end: count - 1,
+            mode: 'edge-end',
+        };
     }
-    return { start: activeIndex - 3, end: activeIndex + 3 };
+    return {
+        start: activeIndex - CAROUSEL_DOTS_CENTER_IDX,
+        end: activeIndex + CAROUSEL_DOTS_CENTER_IDX,
+        mode: 'slide',
+    };
 }
 
-function carouselDotsHtml(count, activeIndex) {
+function applyCarouselDotsMode(dotsRoot, mode) {
+    if (!dotsRoot) return;
+    const slide = mode === 'slide';
+    dotsRoot.classList.toggle('is-carousel-slide', slide);
+    dotsRoot.classList.toggle('is-carousel-edge', !slide);
+}
+
+function carouselDotsButtonsHtml(count, activeIndex) {
     const win = carouselDotWindow(count, activeIndex);
-    const activeInWindow = activeIndex - win.start;
-    const translateX =
-        count > MAX_CAROUSEL_DOTS
-            ? (CAROUSEL_DOTS_CENTER_IDX - activeInWindow) * CAROUSEL_DOT_STEP_PX
-            : 0;
     let buttons = '';
     for (let slideIdx = win.start; slideIdx <= win.end; slideIdx += 1) {
         const edge =
@@ -1002,12 +1058,73 @@ function carouselDotsHtml(count, activeIndex) {
         const edgeCls = edge ? ' is-window-edge' : '';
         buttons += `<button type="button" class="car-card-carousel-dot${edgeCls}" data-slide-to="${slideIdx}" aria-label="Photo ${slideIdx + 1}" aria-current="${slideIdx === activeIndex ? 'true' : 'false'}"></button>`;
     }
-    return `<div class="car-card-carousel-dots-viewport"><div class="car-card-carousel-dots-track" style="transform: translateX(${translateX}px)">${buttons}</div></div>`;
+    return buttons;
 }
 
-function carouselDotsWrapHtml(count, activeIndex) {
+function carouselDotsMarkup(count, activeIndex) {
     if (count < 2) return '';
-    return `<div class="car-card-carousel-dots"><span class="car-card-carousel-dots-center" aria-hidden="true"></span>${carouselDotsHtml(count, activeIndex)}</div>`;
+    return `<div class="car-card-carousel-dots"><div class="car-card-carousel-dots-viewport"><span class="car-card-carousel-dots-center" aria-hidden="true"></span><div class="car-card-carousel-dots-track">${carouselDotsButtonsHtml(count, activeIndex)}</div></div></div>`;
+}
+
+function carouselDotStepPx(track, mode) {
+    const first = track?.querySelector('.car-card-carousel-dot');
+    if (!first) return mode === 'slide' ? 24 : 12;
+    const second = first.nextElementSibling;
+    if (second) return Math.max(8, second.offsetLeft - first.offsetLeft);
+    const slot =
+        mode === 'slide'
+            ? parseFloat(getComputedStyle(first).flexBasis) ||
+              parseFloat(getComputedStyle(track.parentElement || track).getPropertyValue('--carousel-dot-slot')) ||
+              18
+            : first.offsetWidth;
+    const gap = parseFloat(getComputedStyle(track).gap) || 6;
+    return slot + gap;
+}
+
+function refreshCarouselDots(dotsRoot, count, activeIndex, direction) {
+    if (!dotsRoot) return;
+    const track = dotsRoot.querySelector('.car-card-carousel-dots-track');
+    if (!track) return;
+    const win = carouselDotWindow(count, activeIndex);
+    applyCarouselDotsMode(dotsRoot, win.mode);
+    const winKey = `${win.mode}:${win.start}-${win.end}`;
+    if (track.dataset.winKey === winKey) {
+        track.querySelectorAll('.car-card-carousel-dot').forEach((btn) => {
+            const idx = Number(btn.dataset.slideTo);
+            btn.setAttribute('aria-current', idx === activeIndex ? 'true' : 'false');
+        });
+        track.style.transform = 'translateX(0)';
+        return;
+    }
+    const prevStart = Number(track.dataset.winStart ?? win.start);
+    const prevKey = track.dataset.winKey || '';
+    const slideDelta = win.start - prevStart;
+    track.dataset.winKey = winKey;
+    track.dataset.winStart = String(win.start);
+    track.innerHTML = carouselDotsButtonsHtml(count, activeIndex);
+
+    const shouldAnimateStrip =
+        win.mode === 'slide' &&
+        prevKey.startsWith('slide:') &&
+        prevKey !== winKey &&
+        slideDelta !== 0;
+
+    if (shouldAnimateStrip) {
+        const step = carouselDotStepPx(track, win.mode);
+        const goingNext =
+            direction === 'next' || (direction == null && slideDelta > 0);
+        track.style.transition = 'none';
+        track.style.transform = goingNext
+            ? `translateX(${step}px)`
+            : `translateX(${-step}px)`;
+        requestAnimationFrame(() => {
+            track.style.transition = 'transform 0.28s ease';
+            track.style.transform = 'translateX(0)';
+        });
+    } else {
+        track.style.transition = '';
+        track.style.transform = 'translateX(0)';
+    }
 }
 
 function carouselHtml(car) {
@@ -1021,7 +1138,7 @@ function carouselHtml(car) {
     const slides = imgs
         .map(
             (url, i) =>
-                `<img class="car-card-carousel-img" src="${attrEncode(url)}" alt="" data-slide="${i}" loading="lazy" ${i === 0 ? '' : 'hidden'}>`
+                `<img class="car-card-carousel-img" src="${attrEncode(url)}" alt="" data-slide="${i}" loading="lazy" draggable="false">`
         )
         .join('');
     const nav =
@@ -1033,9 +1150,13 @@ function carouselHtml(car) {
         <button type="button" class="car-card-carousel-nav car-card-carousel-nav--next" aria-label="Next photo">
             <svg class="car-card-carousel-nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
-        ${carouselDotsWrapHtml(imgs.length, 0)}`
+        ${carouselDotsMarkup(imgs.length, 0)}`
             : '';
-    return `<div class="car-card-carousel" data-carousel data-count="${imgs.length}">${slides}${nav}</div>`;
+    const strip =
+        imgs.length > 1
+            ? `<div class="car-card-carousel-viewport"><div class="car-card-carousel-strip">${slides}</div></div>`
+            : `<img class="car-card-carousel-img" src="${attrEncode(imgs[0])}" alt="" loading="lazy" draggable="false">`;
+    return `<div class="car-card-carousel" data-carousel data-count="${imgs.length}">${strip}${nav}</div>`;
 }
 
 function locationLine(car) {
@@ -1189,35 +1310,46 @@ function updateUI(items) {
     });
 
     list.querySelectorAll('[data-carousel]').forEach((root) => {
-        const imgs = Array.from(root.querySelectorAll('.car-card-carousel-img'));
+        const strip = root.querySelector('.car-card-carousel-strip');
+        const imgs = strip ? Array.from(strip.querySelectorAll('.car-card-carousel-img')) : [];
         const count = imgs.length;
         if (count < 2) return;
         let idx = 0;
         const dotsBox = root.querySelector('.car-card-carousel-dots');
-        const show = (i) => {
-            idx = (i + count) % count;
-            imgs.forEach((img, j) => img.toggleAttribute('hidden', j !== idx));
-            if (dotsBox) {
-                dotsBox.innerHTML = `<span class="car-card-carousel-dots-center" aria-hidden="true"></span>${carouselDotsHtml(count, idx)}`;
+        const show = (nextIndex, direction) => {
+            const prev = idx;
+            idx = (nextIndex + count) % count;
+            if (strip) {
+                strip.classList.remove('is-anim-left', 'is-anim-right');
+                strip.style.transform = `translate3d(-${idx * 100}%, 0, 0)`;
+                if (direction === 'next') strip.classList.add('is-anim-right');
+                else if (direction === 'prev') strip.classList.add('is-anim-left');
             }
+            refreshCarouselDots(dotsBox, count, idx, direction);
+            root.dataset.slideIndex = String(idx);
+            if (prev !== idx) root.dataset.slideDir = direction || '';
         };
         root.querySelector('.car-card-carousel-nav--prev')?.addEventListener('click', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
-            show(idx - 1);
+            show(idx - 1, 'prev');
         });
         root.querySelector('.car-card-carousel-nav--next')?.addEventListener('click', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
-            show(idx + 1);
+            show(idx + 1, 'next');
         });
         dotsBox?.addEventListener('click', (ev) => {
             const d = ev.target.closest('.car-card-carousel-dot');
             if (!d) return;
             ev.preventDefault();
             ev.stopPropagation();
-            show(Number(d.dataset.slideTo));
+            const target = Number(d.dataset.slideTo);
+            const dir = target > idx ? 'next' : target < idx ? 'prev' : null;
+            show(target, dir);
         });
+        if (strip) strip.style.transform = 'translate3d(0, 0, 0)';
+        applyCarouselDotsMode(dotsBox, carouselDotWindow(count, 0).mode);
     });
 }
 
@@ -1304,8 +1436,8 @@ function resetFilters() {
     document.querySelectorAll('.filter-chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
     document.getElementById('filterMinRoi').value = '';
     document.getElementById('filterMinProfit').value = '';
-    const excludeRoi = document.getElementById('filterExcludeNegativeRoi');
-    if (excludeRoi) excludeRoi.checked = false;
+    const excludeProfit = document.getElementById('filterExcludeNegativeProfit');
+    if (excludeProfit) excludeProfit.checked = false;
     makeSelection.clear();
     clearLocationSelections();
     if (inventoryMeta) populateMetaIntoUi(inventoryMeta);

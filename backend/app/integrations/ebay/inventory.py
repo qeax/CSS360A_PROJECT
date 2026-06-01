@@ -16,10 +16,6 @@ from app.integrations.ebay.client import (
     ebay_fetch_cap,
     get_ebay_client,
 )
-from app.integrations.ebay.parse_item import (
-    _parse_mileage,
-    is_plausible_odometer,
-)
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.services.flip import estimate_flip_from_listing
 
@@ -28,7 +24,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL_SEC = 300
 _ebay_cache: dict[str, tuple[float, list[Any]]] = {}
 
-_YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
+_YEAR_RE = re.compile(r"\b(19[0-9]\d|20[0-3]\d)\b")
 
 
 def invalidate_ebay_inventory_cache() -> None:
@@ -125,17 +121,13 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
     year_econ = year
 
-    mileage_for_flip: int | None = None
-    mileage_raw = item.get("mileage")
-    if mileage_raw is not None:
-        try:
-            candidate = int(mileage_raw)
-            if is_plausible_odometer(candidate):
-                mileage_for_flip = candidate
-        except (TypeError, ValueError):
-            mileage_for_flip = None
-    if mileage_for_flip is None:
-        mileage_for_flip = _parse_mileage(title)
+    from app.integrations.ebay.parse_item import resolve_listing_mileage
+
+    mileage_for_flip = resolve_listing_mileage(
+        title,
+        mileage_hint=item.get("mileage"),
+        aspects=item.get("aspects_json"),
+    )
 
     cond_raw = item.get("condition")
     condition_econ = (str(cond_raw).strip() if cond_raw is not None else None) or None

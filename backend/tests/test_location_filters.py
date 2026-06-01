@@ -91,7 +91,7 @@ def test_filter_country_not_specified(db):
     assert out[0]["location"] is None or not out[0]["location"].get("country")
 
 
-def test_exclude_negative_roi(db):
+def test_exclude_negative_profit(db):
     neg = Car(
         brand="A",
         model="B",
@@ -142,7 +142,7 @@ def test_exclude_negative_roi(db):
         body_styles=None,
         delivery_modes=None,
         vehicle_titles=None,
-        exclude_negative_roi=True,
+        exclude_negative_profit=True,
     )
     assert len(out) == 1
     assert out[0]["net_profit"] >= 0

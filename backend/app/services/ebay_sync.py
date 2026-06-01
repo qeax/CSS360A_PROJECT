@@ -16,10 +16,7 @@ from app.integrations.ebay.inventory import (
     _default_ebay_query,
     resolve_listing_url,
 )
-from app.integrations.ebay.parse_item import (
-    is_plausible_odometer,
-    resolve_vehicle_facets,
-)
+from app.integrations.ebay.parse_item import resolve_listing_mileage, resolve_vehicle_facets
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.models.car import Car
 from app.models.car_satellite import (
@@ -213,15 +210,11 @@ def upsert_ebay_listing(db: Session, item: dict[str, Any]) -> Car | None:
     year = facets["year"]
     year_econ = year
 
-    mileage_for_flip: int | None = None
-    mileage_raw = item.get("mileage")
-    if mileage_raw is not None:
-        try:
-            candidate = int(mileage_raw)
-            if is_plausible_odometer(candidate):
-                mileage_for_flip = candidate
-        except (TypeError, ValueError):
-            mileage_for_flip = None
+    mileage_for_flip = resolve_listing_mileage(
+        title,
+        mileage_hint=item.get("mileage"),
+        aspects=item.get("aspects_json"),
+    )
 
     cond_raw = item.get("condition")
     condition_econ = (str(cond_raw).strip() if cond_raw is not None else None) or None
