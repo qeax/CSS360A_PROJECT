@@ -251,9 +251,10 @@ article.car-card:focus-within .car-card-carousel-dots {
 
 .car-card-carousel-dots.is-carousel-slide .car-card-carousel-dots-viewport {
     width: calc(
-        var(--carousel-dots-visible) * var(--carousel-dot-slot) +
+        var(--carousel-dots-visible) * var(--carousel-dot-slot-compact) +
             (var(--carousel-dots-visible) - 1) * var(--carousel-dot-gap)
     );
+    overflow: visible;
 }
 
 .car-card-carousel-dots-track {
@@ -283,39 +284,24 @@ article.car-card:focus-within .car-card-carousel-dots {
     display: none;
 }
 
+/* Same pitch as edge: active dot grows to 18px and flex pushes neighbors apart */
 .car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot {
-    position: relative;
-    flex: 0 0 var(--carousel-dot-slot);
-    width: var(--carousel-dot-slot);
-    height: var(--carousel-dot-size);
-    margin: 0;
-    padding: 0;
-    background: transparent;
-}
-
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+    flex: 0 0 auto;
     width: var(--carousel-dot-size);
     height: var(--carousel-dot-size);
-    border-radius: 50%;
     background: rgba(255, 255, 255, 0.45);
-    transition: width 0.2s ease, border-radius 0.2s ease, background 0.2s ease;
-    pointer-events: none;
+    transition: background 0.2s, width 0.25s ease, border-radius 0.2s ease, opacity 0.2s;
 }
 
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot:hover::after {
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot:hover {
     background: rgba(255, 255, 255, 0.7);
 }
 
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot.is-window-edge::after {
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot.is-window-edge {
     opacity: 0.45;
 }
 
-.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"]::after {
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"] {
     width: var(--carousel-dot-slot);
     border-radius: 999px;
     background: #fff;

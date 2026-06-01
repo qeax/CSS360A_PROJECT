@@ -1066,19 +1066,13 @@ function carouselDotsMarkup(count, activeIndex) {
     return `<div class="car-card-carousel-dots"><div class="car-card-carousel-dots-viewport"><span class="car-card-carousel-dots-center" aria-hidden="true"></span><div class="car-card-carousel-dots-track">${carouselDotsButtonsHtml(count, activeIndex)}</div></div></div>`;
 }
 
-function carouselDotStepPx(track, mode) {
+function carouselDotStepPx(track) {
     const first = track?.querySelector('.car-card-carousel-dot');
-    if (!first) return mode === 'slide' ? 24 : 12;
+    if (!first) return 12;
     const second = first.nextElementSibling;
     if (second) return Math.max(8, second.offsetLeft - first.offsetLeft);
-    const slot =
-        mode === 'slide'
-            ? parseFloat(getComputedStyle(first).flexBasis) ||
-              parseFloat(getComputedStyle(track.parentElement || track).getPropertyValue('--carousel-dot-slot')) ||
-              18
-            : first.offsetWidth;
     const gap = parseFloat(getComputedStyle(track).gap) || 6;
-    return slot + gap;
+    return first.offsetWidth + gap;
 }
 
 function refreshCarouselDots(dotsRoot, count, activeIndex, direction) {
@@ -1110,7 +1104,7 @@ function refreshCarouselDots(dotsRoot, count, activeIndex, direction) {
         slideDelta !== 0;
 
     if (shouldAnimateStrip) {
-        const step = carouselDotStepPx(track, win.mode);
+        const step = carouselDotStepPx(track);
         const goingNext =
             direction === 'next' || (direction == null && slideDelta > 0);
         track.style.transition = 'none';
