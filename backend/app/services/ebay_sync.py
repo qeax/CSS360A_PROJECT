@@ -16,7 +16,11 @@ from app.integrations.ebay.inventory import (
     _default_ebay_query,
     resolve_listing_url,
 )
-from app.integrations.ebay.parse_item import resolve_listing_mileage, resolve_vehicle_facets
+from app.integrations.ebay.parse_item import (
+    merge_search_summary,
+    resolve_listing_mileage,
+    resolve_vehicle_facets,
+)
 from app.integrations.ebay.price import parse_listing_price
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.models.car import Car
@@ -27,7 +31,7 @@ from app.models.car_satellite import (
     VehicleAspectSnapshot,
 )
 from app.models.external_seller import ExternalSeller
-from app.repositories.cars import mark_expired_auctions
+from app.repositories.cars import invalidate_in_memory_demo_cache, mark_expired_auctions
 from app.services.flip import estimate_flip_from_listing
 from app.services.search_query import normalize_search_key
 
@@ -295,6 +299,61 @@ def upsert_ebay_listing(
 
     _replace_car_children(db, car, item)
     return car
+
+
+class EbayRefreshError(Exception):
+    """Single-listing eBay refresh failed (not configured, not found, or API error)."""
+
+
+def refresh_car_from_ebay(db: Session, car_id: int) -> Car:
+    """
+    Re-fetch one eBay listing via getItem and upsert into DB.
+    Does not use per-user sync cooldown.
+    """
+    car = db.execute(select(Car).where(Car.id == car_id)).scalar_one_or_none()
+    if car is None:
+        raise EbayRefreshError("car_not_found")
+    src = (car.source or "").strip().lower()
+    if src != "ebay":
+        raise EbayRefreshError("not_ebay_listing")
+    ext_id = (car.external_listing_id or "").strip()
+    if not ext_id:
+        raise EbayRefreshError("missing_external_listing_id")
+
+    client = get_ebay_client()
+    if not client.is_configured():
+        raise EbayRefreshError("ebay_not_configured")
+
+    detail = client.get_item(ext_id)
+    if not detail:
+        raise EbayRefreshError("ebay_get_item_failed")
+
+    summary = {
+        "external_listing_id": ext_id,
+        "title": (getattr(car, "description_summary", None) or f"{car.brand} {car.model}").strip(),
+        "source": "ebay",
+        "brand": car.brand,
+        "model": car.model,
+        "year": car.year,
+    }
+    merged = merge_search_summary(summary, detail)
+    merged["raw_listing_json"] = detail
+    if detail.get("sellerItemRevision"):
+        merged["seller_item_revision"] = detail.get("sellerItemRevision")
+
+    updated = upsert_ebay_listing(
+        db, merged, ingest_search_key=getattr(car, "ingest_search_key", None)
+    )
+    if updated is None:
+        raise EbayRefreshError("upsert_failed")
+    try:
+        db.commit()
+        invalidate_in_memory_demo_cache()
+    except Exception as e:
+        db.rollback()
+        raise EbayRefreshError(f"commit_failed: {e}") from e
+    db.refresh(updated)
+    return updated
 
 
 def fetch_ebay_listings_for_sync(*, query: str) -> list[dict[str, Any]]:

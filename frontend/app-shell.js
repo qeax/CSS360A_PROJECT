@@ -133,22 +133,32 @@ function initThemeToggle() {
 
 const CSS360_SETTINGS_KEY = 'css360_settings_v1';
 
+const CSS360_SETTINGS_DEFAULTS = {
+    showListingJsonDebug: false,
+    showDeleteCarButton: false,
+};
+
 function getSettings() {
     try {
         const raw = localStorage.getItem(CSS360_SETTINGS_KEY);
-        if (!raw) return { showListingJsonDebug: false };
+        if (!raw) return { ...CSS360_SETTINGS_DEFAULTS };
         const parsed = JSON.parse(raw);
-        return { showListingJsonDebug: Boolean(parsed.showListingJsonDebug) };
+        return {
+            showListingJsonDebug: Boolean(parsed.showListingJsonDebug),
+            showDeleteCarButton: Boolean(parsed.showDeleteCarButton),
+        };
     } catch {
-        return { showListingJsonDebug: false };
+        return { ...CSS360_SETTINGS_DEFAULTS };
     }
 }
 
-function saveSettings(settings) {
+function saveSettings(partial) {
+    const next = { ...getSettings(), ...partial };
     localStorage.setItem(
         CSS360_SETTINGS_KEY,
         JSON.stringify({
-            showListingJsonDebug: Boolean(settings.showListingJsonDebug),
+            showListingJsonDebug: Boolean(next.showListingJsonDebug),
+            showDeleteCarButton: Boolean(next.showDeleteCarButton),
         }),
     );
 }

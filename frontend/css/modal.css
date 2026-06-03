@@ -16,6 +16,69 @@
     display: flex;
 }
 
+.confirm-modal {
+    z-index: 1100;
+}
+
+.confirm-modal[hidden] {
+    display: none !important;
+}
+
+.confirm-modal:not([hidden]).active {
+    display: flex;
+}
+
+.confirm-modal-box {
+    width: min(100% - 32px, 400px);
+    max-width: 400px;
+}
+
+.confirm-modal-title {
+    margin: 0 0 12px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--text-main);
+}
+
+.confirm-modal-message {
+    margin: 0 0 20px;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.confirm-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.confirm-modal-btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--bg-page);
+    color: var(--text-main);
+}
+
+.confirm-modal-btn--cancel:hover {
+    background: color-mix(in srgb, var(--border-color) 40%, transparent);
+}
+
+.confirm-modal-btn--confirm {
+    border-color: #ef4444;
+    background: #ef4444;
+    color: #fff;
+}
+
+.confirm-modal-btn--confirm:hover {
+    filter: brightness(1.08);
+}
+
 .modal-listing-link {
     display: inline-flex;
     align-items: center;
@@ -56,6 +119,91 @@
     align-items: center;
     gap: 10px;
     justify-content: flex-end;
+}
+
+.modal-vehicle-details {
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--bg-page);
+    border: 1px solid var(--border-color);
+}
+
+.modal-vehicle-details-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+}
+
+.modal-vehicle-detail-row {
+    display: grid;
+    grid-template-columns: minmax(0, 110px) 1fr;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-bottom: 6px;
+}
+
+.modal-vehicle-detail-row:last-child {
+    margin-bottom: 0;
+}
+
+.modal-vehicle-detail-label {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.modal-vehicle-detail-value {
+    color: var(--text-main);
+    word-break: break-word;
+}
+
+.modal-refresh-btn {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-green);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent-green);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.modal-refresh-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+}
+
+.modal-refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.modal-delete-btn {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid #ef4444;
+    border-radius: 8px;
+    background: transparent;
+    color: #ef4444;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.modal-delete-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, #ef4444 12%, transparent);
+}
+
+.modal-delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .modal-json-debug-btn {

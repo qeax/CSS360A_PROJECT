@@ -19,13 +19,10 @@ from app.integrations.ebay.parse_item import (
     resolve_vehicle_facets,
 )
 from app.models.car import Car
-from app.services.body_style import (
-    extract_body_style_from_aspects_json,
-    extract_drive_type_from_aspects_json,
-)
 from app.services.flip import calculate_flip_score, flip_metrics_unknown
 from app.services.geo import haversine_km, latlng_pair
 from app.services.search_query import meaningful_query_tokens, normalize_search_key
+from app.services.vehicle_aspects import extended_vehicle_fields_from_aspects_json
 
 _in_memory_demo_cache: list[Any] | None = None
 
@@ -235,6 +232,58 @@ def load_inventory_cars_from_db(db: Session, *, search_key: str | None = None) -
     return list(db.scalars(stmt).all())
 
 
+def load_car_by_id(db: Session, car_id: int) -> Car | None:
+    """Load one car with satellites for API serialization."""
+    return db.execute(
+        select(Car)
+        .where(Car.id == car_id)
+        .options(
+            joinedload(Car.external_seller),
+            joinedload(Car.location),
+            joinedload(Car.listing_terms),
+            selectinload(Car.media),
+            selectinload(Car.aspect_snapshots),
+        )
+    ).scalar_one_or_none()
+
+
+def car_to_api_item(car: Car) -> dict[str, Any] | None:
+    """Serialize a single loaded Car to the same dict shape as GET /cars items."""
+    rows = apply_filters(
+        [car],
+        make=None,
+        makes=None,
+        model=None,
+        min_year=None,
+        max_year=None,
+        min_mileage=None,
+        max_mileage=None,
+        condition=None,
+        conditions=None,
+        max_price=None,
+        min_price=None,
+        min_profit=None,
+        min_roi=None,
+        q=None,
+        countries=None,
+        regions=None,
+        cities=None,
+        radius_km=None,
+        radius_mi=None,
+        anchor_lat=None,
+        anchor_lng=None,
+        listing_formats=None,
+        body_styles=None,
+        delivery_modes=None,
+        vehicle_titles=None,
+        exclude_negative_roi=False,
+        exclude_negative_profit=False,
+        exclude_ended_auctions=False,
+        exclude_unknown_price=False,
+    )
+    return rows[0] if rows else None
+
+
 def load_inventory_for_request(db: Session, *, search_key: str | None = None) -> list:
     """DB inventory, or in-memory demo when the cars table is empty."""
     if _stored_cars_exist(db):
@@ -317,12 +366,16 @@ def _latest_aspects_json(car: Car) -> Any:
     ).aspects_json
 
 
+def _aspect_fields_for_car(car: Car) -> dict[str, Optional[str]]:
+    return extended_vehicle_fields_from_aspects_json(_latest_aspects_json(car))
+
+
 def _body_style_for_car(car: Car) -> Optional[str]:
-    return extract_body_style_from_aspects_json(_latest_aspects_json(car))
+    return _aspect_fields_for_car(car).get("body_style")
 
 
 def _drive_type_for_car(car: Car) -> Optional[str]:
-    return extract_drive_type_from_aspects_json(_latest_aspects_json(car))
+    return _aspect_fields_for_car(car).get("drive_type")
 
 
 def _is_demo_inventory_car(car: Any) -> bool:
@@ -684,7 +737,8 @@ def apply_filters(
             if not cf or cf not in formats_l:
                 continue
 
-        body_style = _body_style_for_car(car)
+        aspect_fields = _aspect_fields_for_car(car)
+        body_style = aspect_fields.get("body_style")
         if body_l:
             bs = (body_style or "").strip().lower()
             if not bs or bs not in body_l:
@@ -718,7 +772,7 @@ def apply_filters(
                 continue
 
         mileage = mi
-        drive_type = _drive_type_for_car(car)
+        drive_type = aspect_fields.get("drive_type")
 
         listing_terms = car.listing_terms
         delivery = None
@@ -802,6 +856,13 @@ def apply_filters(
                 "images": image_urls,
                 "body_style": body_style,
                 "drive_type": drive_type,
+                "vin": aspect_fields.get("vin"),
+                "transmission": aspect_fields.get("transmission"),
+                "trim": aspect_fields.get("trim"),
+                "engine": aspect_fields.get("engine"),
+                "fuel_type": aspect_fields.get("fuel_type"),
+                "fuel_city": aspect_fields.get("fuel_city"),
+                "fuel_highway": aspect_fields.get("fuel_highway"),
                 "source": car.source or "manual",
                 "external_listing_id": car.external_listing_id,
                 "listing_url": listing_url_out,

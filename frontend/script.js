@@ -926,21 +926,21 @@ function updateResultsHintAndLoadMore() {
     }
 }
 
-async function executeSearch({ append = false, syncEbay = false } = {}) {
+async function executeSearch({ append = false, syncEbay = false, scrollToTop } = {}) {
     const list = document.getElementById('inventoryList');
     const hint = document.getElementById('inventoryResultsHint');
     const loadBtn = document.getElementById('loadMoreBtn');
     const q = document.getElementById('globalSearchInput')?.value.trim() || '';
+    const effectiveSyncEbay = !append && (syncEbay || !q);
+    const shouldScrollToTop = scrollToTop ?? !append;
 
     if (!append) {
         stopAuctionCountdownTimer();
         list.style.opacity = '0.55';
         list.setAttribute('aria-busy', 'true');
-        const loadingLabel = syncEbay ? 'Updating from eBay…' : 'Loading inventory…';
+        const loadingLabel = effectiveSyncEbay ? 'Updating from eBay…' : 'Loading inventory…';
         const spinner = '<span class="loading-spinner" aria-hidden="true"></span>';
-        list.innerHTML = syncEbay
-            ? `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`
-            : `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`;
+        list.innerHTML = `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`;
     } else if (loadBtn) {
         loadBtn.dataset.loading = '1';
         loadBtn.disabled = true;
@@ -949,7 +949,7 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
 
     const query = new URL('/api/cars', window.location.origin);
     if (q) query.searchParams.set('q', q);
-    if (syncEbay) query.searchParams.set('sync_ebay', 'true');
+    if (effectiveSyncEbay) query.searchParams.set('sync_ebay', 'true');
 
     appendMultiParams(query, 'countries', Array.from(locSelection.countries));
     appendMultiParams(query, 'regions', Array.from(locSelection.regions));
@@ -1072,7 +1072,7 @@ async function executeSearch({ append = false, syncEbay = false } = {}) {
         currentResults = carData;
         updateUI(currentResults);
         updateResultsHintAndLoadMore();
-        if (!append) {
+        if (!append && shouldScrollToTop) {
             requestAnimationFrame(() => scrollInventoryToTop());
         }
         list.removeAttribute('aria-busy');
@@ -1362,12 +1362,40 @@ function specLines(car) {
     const body = car.body_style || '—';
     const drive = car.drive_type || '—';
     const title = car.vehicle_title || '—';
+    const mech = [car.transmission, car.engine].filter(Boolean).join(' · ');
+    const mechLine = mech
+        ? `<span class="car-card-spec-line">${escapeHtml(mech)}</span>`
+        : '';
     return `
         <span class="car-card-spec-line">${escapeHtml(locationLine(car))}</span>
         <span class="car-card-spec-line">${escapeHtml(body)} · ${escapeHtml(drive)}</span>
         <span class="car-card-spec-line">Title: ${escapeHtml(title)}</span>
+        ${mechLine}
         <span class="car-card-spec-line">${escapeHtml(deliverySummary(car.delivery))}</span>
     `;
+}
+
+function modalVehicleDetailsHtml(car) {
+    const fuelMpg =
+        car.fuel_city != null && car.fuel_highway != null
+            ? `${car.fuel_city} / ${car.fuel_highway} mpg`
+            : null;
+    const rows = [
+        ['VIN', car.vin],
+        ['Trim', car.trim],
+        ['Engine', car.engine],
+        ['Transmission', car.transmission],
+        ['Fuel type', car.fuel_type],
+        ['Fuel (city / hwy)', fuelMpg],
+    ].filter(([, value]) => value != null && String(value).trim() !== '');
+    if (rows.length === 0) return '';
+    const items = rows
+        .map(
+            ([label, value]) =>
+                `<div class="modal-vehicle-detail-row"><span class="modal-vehicle-detail-label">${escapeHtml(label)}</span><span class="modal-vehicle-detail-value">${escapeHtml(String(value))}</span></div>`,
+        )
+        .join('');
+    return `<div class="modal-vehicle-details"><div class="modal-vehicle-details-title">Vehicle details</div>${items}</div>`;
 }
 
 function updateUI(items) {
@@ -1477,7 +1505,16 @@ function showCarDetails(car) {
 
     const mileageDisplay =
         car.mileage != null ? `${Number(car.mileage).toLocaleString()} mi` : 'Unknown mileage';
-    const jsonDebugBtn = getSettings().showListingJsonDebug
+    const modalSettings = getSettings();
+    const isEbayListing =
+        (car.source || '').toLowerCase() === 'ebay' && Boolean(car.external_listing_id);
+    const ebayRefreshBtn = isEbayListing
+        ? '<button type="button" class="modal-refresh-btn" id="modalRefreshEbayBtn">Refresh from eBay</button>'
+        : '';
+    const deleteCarBtn = modalSettings.showDeleteCarButton
+        ? '<button type="button" class="modal-delete-btn" id="modalDeleteCarBtn">Delete from database</button>'
+        : '';
+    const jsonDebugBtn = modalSettings.showListingJsonDebug
         ? '<button type="button" class="modal-json-debug-btn" id="modalViewRawJsonBtn">View raw JSON</button>'
         : '';
     const econKnown = isPriceKnown(car);
@@ -1512,10 +1549,82 @@ function showCarDetails(car) {
             </div>
             <div style="height:1px;background:var(--separator);"></div>
             ${metricsSection}
+            ${modalVehicleDetailsHtml(car)}
             ${listingLinkHtml(car, 'modal-listing-link')}
+            ${ebayRefreshBtn}
+            ${deleteCarBtn}
             ${jsonDebugBtn}
             <pre class="modal-raw-json" id="modalRawJsonPre" hidden></pre>
         </div>`;
+
+    document.getElementById('modalRefreshEbayBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('modalRefreshEbayBtn');
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Refreshing…';
+        try {
+            const res = await fetch(`/api/cars/${car.id}/ebay-refresh`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+            if (res.status === 401) {
+                window.location.replace('login.html');
+                return;
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const updated = data.item;
+            if (!updated) throw new Error('missing item');
+            const idx = carData.findIndex((c) => c.id === car.id);
+            if (idx >= 0) carData[idx] = updated;
+            currentResults = carData;
+            updateUI(currentResults);
+            showCarDetails(updated);
+        } catch (err) {
+            console.error(err);
+            window.alert('Failed to refresh this listing from eBay. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Refresh from eBay';
+        }
+    });
+
+    document.getElementById('modalDeleteCarBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('modalDeleteCarBtn');
+        if (!btn) return;
+        const title =
+            car.year != null ? `${car.brand} ${car.model} (${car.year})` : `${car.brand} ${car.model}`;
+        const ok = await showConfirmDialog({
+            title: 'Delete listing?',
+            message: `Permanently delete "${title}" from the database? This cannot be undone.`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+        });
+        if (!ok) return;
+        btn.disabled = true;
+        btn.textContent = 'Deleting…';
+        try {
+            const res = await fetch(`/api/cars/${car.id}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            if (res.status === 401) {
+                window.location.replace('login.html');
+                return;
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            hideModal();
+            carData = carData.filter((c) => c.id !== car.id);
+            currentResults = carData;
+            listTotal = Math.max(0, listTotal - 1);
+            updateUI(currentResults);
+            updateResultsHintAndLoadMore();
+        } catch (err) {
+            console.error(err);
+            window.alert('Failed to delete this listing. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Delete from database';
+        }
+    });
 
     document.getElementById('modalViewRawJsonBtn')?.addEventListener('click', async () => {
         const pre = document.getElementById('modalRawJsonPre');
@@ -1552,6 +1661,58 @@ function hideModal() {
     document.getElementById('itemModal').classList.remove('active');
 }
 
+/**
+ * @param {{ title: string, message: string, confirmText?: string, cancelText?: string }} opts
+ * @returns {Promise<boolean>}
+ */
+function showConfirmDialog(opts) {
+    const modal = document.getElementById('confirmModal');
+    const titleEl = document.getElementById('confirmModalTitle');
+    const messageEl = document.getElementById('confirmModalMessage');
+    const cancelBtn = document.getElementById('confirmModalCancelBtn');
+    const confirmBtn = document.getElementById('confirmModalConfirmBtn');
+    if (!modal || !titleEl || !messageEl || !cancelBtn || !confirmBtn) {
+        return Promise.resolve(false);
+    }
+
+    titleEl.textContent = opts.title;
+    messageEl.textContent = opts.message;
+    cancelBtn.textContent = opts.cancelText || 'Cancel';
+    confirmBtn.textContent = opts.confirmText || 'Confirm';
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            modal.classList.remove('active');
+            modal.hidden = true;
+            document.removeEventListener('keydown', onKeydown);
+            cancelBtn.removeEventListener('click', onCancel);
+            confirmBtn.removeEventListener('click', onConfirm);
+            modal.removeEventListener('click', onBackdrop);
+            resolve(value);
+        };
+        const onCancel = () => finish(false);
+        const onConfirm = () => finish(true);
+        const onBackdrop = (e) => {
+            if (e.target === modal) finish(false);
+        };
+        const onKeydown = (e) => {
+            if (e.key === 'Escape') finish(false);
+        };
+
+        cancelBtn.addEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKeydown);
+
+        modal.hidden = false;
+        modal.classList.add('active');
+        cancelBtn.focus();
+    });
+}
+
 function resetFilters() {
     document.querySelectorAll('.filter-chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
     document.getElementById('filterMinRoi').value = '';
@@ -1575,7 +1736,20 @@ function resetFilters() {
     executeSearch({ append: false });
 }
 
+function initFilterToggles() {
+    document.querySelectorAll('.filter-toggle').forEach((label) => {
+        const input = label.querySelector('input[type="checkbox"]');
+        if (!input) return;
+        input.tabIndex = -1;
+        // Prevent focus scroll when clicking custom toggle switches in the sidebar.
+        label.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
+    });
+}
+
 function initEventListeners() {
+    initFilterToggles();
     document
         .getElementById('applyFiltersBtn')
         ?.addEventListener('click', () => executeSearch({ append: false, syncEbay: false }));

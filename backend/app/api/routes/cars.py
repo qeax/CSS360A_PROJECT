@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -13,11 +13,19 @@ from app.models.user import User
 from app.repositories.cars import (
     _q_tokens,
     apply_filters,
+    car_to_api_item,
     compute_inventory_meta,
+    invalidate_in_memory_demo_cache,
+    load_car_by_id,
     load_inventory_for_request,
     sort_car_dicts_inplace,
 )
-from app.services.ebay_sync import EbaySyncCooldownError, sync_ebay_inventory
+from app.services.ebay_sync import (
+    EbayRefreshError,
+    EbaySyncCooldownError,
+    refresh_car_from_ebay,
+    sync_ebay_inventory,
+)
 from app.services.search_query import normalize_search_key
 
 router = APIRouter(tags=["cars"])
@@ -48,6 +56,61 @@ def get_car_raw_listing(
     if car is None or not car.raw_listing_json:
         raise HTTPException(status_code=404, detail="raw_listing_not_found")
     return {"id": car.id, "raw_listing_json": car.raw_listing_json}
+
+
+@router.post("/cars/{car_id}/ebay-refresh")
+def refresh_car_ebay(
+    car_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    try:
+        refresh_car_from_ebay(db, car_id)
+    except EbayRefreshError as e:
+        code = str(e)
+        if code == "car_not_found":
+            raise HTTPException(status_code=404, detail="car_not_found") from e
+        if code in ("not_ebay_listing", "missing_external_listing_id"):
+            raise HTTPException(status_code=400, detail=code) from e
+        if code == "ebay_not_configured":
+            raise HTTPException(status_code=503, detail="ebay_not_configured") from e
+        raise HTTPException(status_code=503, detail=code) from e
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+
+    car = load_car_by_id(db, car_id)
+    if car is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    item = car_to_api_item(car)
+    if item is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    return {"item": item}
+
+
+@router.delete("/cars/{car_id}", status_code=204)
+def delete_car(
+    car_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    car = db.execute(select(Car).where(Car.id == car_id)).scalar_one_or_none()
+    if car is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    try:
+        db.delete(car)
+        db.commit()
+        invalidate_in_memory_demo_cache()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+    return Response(status_code=204)
 
 
 @router.get("/cars/meta")

@@ -259,6 +259,20 @@ def resolve_vehicle_facets(
     }
 
 
+def _parse_mileage_from_aspect_raw(raw: Optional[str]) -> Optional[int]:
+    """Trust explicit Mileage aspect (allows low odometer, e.g. collector cars)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    text = raw.strip().replace(",", "")
+    if text.isdigit():
+        value = int(text)
+        if 1980 <= value <= 2039:
+            return None
+        if 0 <= value <= MAX_PLAUSIBLE_ODOMETER_MI:
+            return value
+    return _parse_mileage(raw)
+
+
 def resolve_listing_mileage(
     title: str | None,
     *,
@@ -273,7 +287,12 @@ def resolve_listing_mileage(
         if parsed_hint is not None:
             return parsed_hint
     amap = _aspect_value_map(aspects) if aspects else {}
-    from_aspects = _parse_mileage(_pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES)))
+    aspect_raw = _pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES))
+    if aspect_raw:
+        from_aspect = _parse_mileage_from_aspect_raw(aspect_raw)
+        if from_aspect is not None:
+            return from_aspect
+    from_aspects = _parse_mileage(aspect_raw)
     if from_aspects is not None:
         return from_aspects
     return _parse_mileage(title)

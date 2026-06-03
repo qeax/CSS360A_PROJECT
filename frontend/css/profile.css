@@ -78,3 +78,17 @@ img.profile-card-avatar {
     font-size: 0.9rem;
     color: var(--topbar-muted);
 }
+
+.settings-toggles {
+    align-self: stretch;
+    width: 100%;
+    text-align: left;
+}
+
+.settings-toggles .settings-toggle {
+    margin-bottom: 12px;
+}
+
+.settings-toggles .settings-toggle:last-child {
+    margin-bottom: 0;
+}
