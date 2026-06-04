@@ -41,18 +41,51 @@ def _year_slider_bounds() -> tuple[int, int]:
     return _YEAR_SLIDER_MIN, _YEAR_SLIDER_MAX
 
 
+def slider_defaults() -> dict[str, float | int]:
+    """Canonical filter slider bounds (single source of truth for UI fallbacks)."""
+    (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
+    year_lo, year_hi = _year_slider_bounds()
+    return {
+        "min_price": price_lo,
+        "max_price": price_hi,
+        "min_year": year_lo,
+        "max_year": year_hi,
+        "min_mileage": mi_lo,
+        "max_mileage": mi_hi,
+    }
+
+
+def _normalize_meta_slider_bounds(
+    *,
+    min_price: float,
+    max_price: float,
+    min_year: int,
+    max_year: int,
+    min_mileage: int,
+    max_mileage: int,
+) -> tuple[float, float, int, int, int, int]:
+    """Ensure min < max for each dimension; use slider_defaults() when data is invalid."""
+    defaults = slider_defaults()
+    if max_price <= min_price:
+        min_price, max_price = defaults["min_price"], defaults["max_price"]
+    if max_year <= min_year:
+        min_year, max_year = int(defaults["min_year"]), int(defaults["max_year"])
+    if max_mileage <= min_mileage:
+        min_mileage, max_mileage = int(defaults["min_mileage"]), int(defaults["max_mileage"])
+    return min_price, max_price, min_year, max_year, min_mileage, max_mileage
+
+
 logger = logging.getLogger(__name__)
 
 
-def _effective_mileage(car: Any) -> int:
-    """Mileage used for filtering when listing data has no odometer."""
+def _effective_mileage(car: Any) -> int | None:
+    """Plausible odometer for mileage filters; None when unknown (do not invent values)."""
     mm = getattr(car, "mileage", None)
     if mm is not None:
         mi = int(mm)
         if is_plausible_odometer(mi):
             return mi
-    car_id = getattr(car, "id", None) or 1
-    return 75000 + (int(car_id) * 1500) % 90000
+    return None
 
 
 def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]:
@@ -408,9 +441,12 @@ def apply_filters(
             continue
 
         mi = _effective_mileage(car)
-        if min_mileage is not None and mi < min_mileage:
-            continue
-        if max_mileage is not None and mi > max_mileage:
+        if mi is not None:
+            if min_mileage is not None and mi < min_mileage:
+                continue
+            if max_mileage is not None and mi > max_mileage:
+                continue
+        elif min_mileage is not None or max_mileage is not None:
             continue
 
         cond_value = (car.condition or "").strip().lower()
@@ -472,7 +508,7 @@ def apply_filters(
         if min_roi is not None and analysis["roi"] < min_roi:
             continue
 
-        mileage = mi
+        mileage = mi  # None when odometer unknown (UI shows —)
         drive_type = _drive_type_for_car(car)
 
         listing_terms = car.listing_terms
@@ -574,8 +610,10 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
         cars = _cars_for_inventory(db, inventory_query=None)
     elif get_ebay_client().is_configured():
         inventory_source = "ebay"
-        # Do not call eBay on /cars/meta — doubles latency; slider bounds use demo catalog.
-        cars = list(_get_cached_in_memory_cars()) if in_memory_demo_enabled() else []
+        cars = fetch_ebay_inventory_views(None)
+        if not cars and in_memory_demo_enabled():
+            inventory_source = "demo"
+            cars = list(_get_cached_in_memory_cars())
     elif in_memory_demo_enabled():
         inventory_source = "demo"
         cars = list(_get_cached_in_memory_cars())
@@ -585,8 +623,17 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
     if not cars:
         (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
         year_lo, year_hi = _year_slider_bounds()
+        price_lo, price_hi, year_lo, year_hi, mi_lo, mi_hi = _normalize_meta_slider_bounds(
+            min_price=price_lo,
+            max_price=price_hi,
+            min_year=year_lo,
+            max_year=year_hi,
+            min_mileage=mi_lo,
+            max_mileage=mi_hi,
+        )
         return {
             "inventory_source": inventory_source,
+            "slider_defaults": slider_defaults(),
             "min_price": price_lo,
             "max_price": price_hi,
             "min_year": year_lo,
@@ -665,14 +712,23 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
                 },
             )
 
+    price_lo, price_hi, year_lo, year_hi, mi_lo, mi_hi = _normalize_meta_slider_bounds(
+        min_price=float(price_lo),
+        max_price=float(price_hi),
+        min_year=int(year_lo),
+        max_year=int(year_hi),
+        min_mileage=int(mi_lo),
+        max_mileage=int(mi_hi),
+    )
     return {
         "inventory_source": inventory_source,
-        "min_price": float(price_lo),
-        "max_price": float(price_hi),
-        "min_year": int(year_lo),
-        "max_year": int(year_hi),
-        "min_mileage": int(mi_lo),
-        "max_mileage": int(mi_hi),
+        "slider_defaults": slider_defaults(),
+        "min_price": price_lo,
+        "max_price": price_hi,
+        "min_year": year_lo,
+        "max_year": year_hi,
+        "min_mileage": mi_lo,
+        "max_mileage": mi_hi,
         "countries": sorted(countries, key=str.lower),
         "regions_by_country": {
             k: sorted(v, key=str.lower) for k, v in sorted(regions_by_country.items())

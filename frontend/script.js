@@ -611,8 +611,25 @@ function initFilterDropdowns() {
     });
 }
 
+/** Fallback bounds from API (backend slider_defaults); avoids duplicating magic numbers in JS. */
+function getSliderDefaults(meta) {
+    const d = meta && meta.slider_defaults;
+    if (d && d.min_price != null && d.max_price != null) {
+        return d;
+    }
+    return {
+        min_price: meta?.min_price ?? 0,
+        max_price: meta?.max_price ?? 0,
+        min_year: meta?.min_year ?? 0,
+        max_year: meta?.max_year ?? 0,
+        min_mileage: meta?.min_mileage ?? 0,
+        max_mileage: meta?.max_mileage ?? 0,
+    };
+}
+
 function populateMetaIntoUi(meta) {
     inventoryMeta = meta;
+    const defaults = getSliderDefaults(meta);
     const pmin = document.getElementById('filterPriceMin');
     const pmax = document.getElementById('filterPriceMax');
     const ymin = document.getElementById('filterYearMin');
@@ -623,8 +640,8 @@ function populateMetaIntoUi(meta) {
         let lo = Math.floor(meta.min_price / 100) * 100;
         let hi = Math.ceil(meta.max_price / 100) * 100;
         if (hi <= lo) {
-            lo = 0;
-            hi = 42500;
+            lo = Math.floor(defaults.min_price / 100) * 100;
+            hi = Math.ceil(defaults.max_price / 100) * 100;
         }
         [pmin, pmax].forEach((el) => {
             el.min = String(lo);
@@ -638,8 +655,8 @@ function populateMetaIntoUi(meta) {
         let yLo = Number(meta.min_year);
         let yHi = Number(meta.max_year);
         if (yHi <= yLo) {
-            yLo = 2000;
-            yHi = 2025;
+            yLo = Number(defaults.min_year);
+            yHi = Number(defaults.max_year);
         }
         ymin.min = String(yLo);
         ymin.max = String(yHi);
@@ -653,8 +670,8 @@ function populateMetaIntoUi(meta) {
         let lo = Number(meta.min_mileage);
         let hi = Number(meta.max_mileage);
         if (hi <= lo) {
-            lo = 8000;
-            hi = 145000;
+            lo = Number(defaults.min_mileage);
+            hi = Number(defaults.max_mileage);
         }
         const step = 500;
         const loR = Math.floor(lo / step) * step;
@@ -997,15 +1014,15 @@ function getListingUrl(car) {
     if (direct.startsWith('http://') || direct.startsWith('https://')) {
         return direct;
     }
+    // Legacy fallback when API omits listing_url (backend normally resolves eBay ids).
     const ext = (car.external_listing_id || '').trim();
-    if (!ext) return '';
     const parts = ext.split('|');
-    let numeric = '';
-    if (parts.length >= 2 && /^\d+$/.test(parts[1])) {
-        numeric = parts[1];
-    } else if (/^\d+$/.test(ext)) {
-        numeric = ext;
-    }
+    const numeric =
+        parts.length >= 2 && /^\d+$/.test(parts[1])
+            ? parts[1]
+            : /^\d+$/.test(ext)
+              ? ext
+              : '';
     return numeric ? `https://www.ebay.com/itm/${numeric}` : '';
 }
 
@@ -1016,36 +1033,58 @@ function listingLinkHtml(car, className = 'car-card-listing-link') {
 }
 
 function priceRangeBounds() {
-    if (!inventoryMeta || inventoryMeta.max_price <= inventoryMeta.min_price) {
+    if (!inventoryMeta) {
         return { lo: 0, hi: 0, active: false };
     }
-    const lo = Math.floor(inventoryMeta.min_price / 100) * 100;
-    const hi = Math.ceil(inventoryMeta.max_price / 100) * 100;
+    const defaults = getSliderDefaults(inventoryMeta);
+    let lo = Math.floor(inventoryMeta.min_price / 100) * 100;
+    let hi = Math.ceil(inventoryMeta.max_price / 100) * 100;
+    if (hi <= lo) {
+        lo = Math.floor(defaults.min_price / 100) * 100;
+        hi = Math.ceil(defaults.max_price / 100) * 100;
+    }
+    if (hi <= lo) {
+        return { lo: 0, hi: 0, active: false };
+    }
     return { lo, hi, active: true };
 }
 
 function yearRangeBounds() {
-    if (!inventoryMeta || inventoryMeta.max_year <= inventoryMeta.min_year) {
+    if (!inventoryMeta) {
         return { lo: 0, hi: 0, active: false };
     }
-    return { lo: inventoryMeta.min_year, hi: inventoryMeta.max_year, active: true };
+    const defaults = getSliderDefaults(inventoryMeta);
+    let lo = Number(inventoryMeta.min_year);
+    let hi = Number(inventoryMeta.max_year);
+    if (hi <= lo) {
+        lo = Number(defaults.min_year);
+        hi = Number(defaults.max_year);
+    }
+    if (hi <= lo) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    return { lo, hi, active: true };
 }
 
 function mileageRangeBounds() {
-    if (
-        !inventoryMeta ||
-        inventoryMeta.min_mileage == null ||
-        inventoryMeta.max_mileage == null ||
-        inventoryMeta.max_mileage <= inventoryMeta.min_mileage
-    ) {
+    if (!inventoryMeta) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    const defaults = getSliderDefaults(inventoryMeta);
+    if (inventoryMeta.min_mileage == null || inventoryMeta.max_mileage == null) {
         return { lo: 0, hi: 0, active: false };
     }
     const step = 500;
-    return {
-        lo: Math.floor(Number(inventoryMeta.min_mileage) / step) * step,
-        hi: Math.ceil(Number(inventoryMeta.max_mileage) / step) * step,
-        active: true,
-    };
+    let lo = Math.floor(Number(inventoryMeta.min_mileage) / step) * step;
+    let hi = Math.ceil(Number(inventoryMeta.max_mileage) / step) * step;
+    if (hi <= lo) {
+        lo = Math.floor(Number(defaults.min_mileage) / step) * step;
+        hi = Math.ceil(Number(defaults.max_mileage) / step) * step;
+    }
+    if (hi <= lo) {
+        return { lo: 0, hi: 0, active: false };
+    }
+    return { lo, hi, active: true };
 }
 
 function specLines(car) {
