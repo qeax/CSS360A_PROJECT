@@ -3,7 +3,7 @@
 }
 
 .profile-page {
-    max-width: 520px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 24px 20px 48px;
 }
@@ -91,4 +91,87 @@ img.profile-card-avatar {
 
 .settings-toggles .settings-toggle:last-child {
     margin-bottom: 0;
+}
+
+.settings-actions {
+    align-self: stretch;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.settings-test-notification-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-test-notification-btn:hover:not(:disabled) {
+    background: var(--bg-page);
+    border-color: var(--text-muted);
+}
+
+.settings-test-notification-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.settings-test-notification-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.profile-watchlist {
+    margin-top: 32px;
+}
+
+.profile-watchlist-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.profile-watchlist-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.profile-watchlist-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.profile-watchlist-count {
+    font-size: 0.875rem;
+    color: var(--topbar-muted);
+}
+
+.profile-watchlist-empty {
+    padding: 24px;
+    border-radius: 12px;
+    border: 1px dashed var(--topbar-border);
+    color: var(--topbar-muted);
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.profile-watchlist .inventory {
+    margin: 0;
 }

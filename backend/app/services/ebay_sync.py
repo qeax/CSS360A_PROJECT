@@ -5,13 +5,18 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.integrations.ebay.client import ebay_fetch_cap, get_ebay_client
+from app.integrations.ebay.client import (
+    ebay_batch_size,
+    ebay_wave_size,
+    get_ebay_client,
+)
 from app.integrations.ebay.inventory import (
     _default_ebay_query,
     resolve_listing_url,
@@ -30,9 +35,16 @@ from app.models.car_satellite import (
     CarMedia,
     VehicleAspectSnapshot,
 )
+from app.models.ebay_sync_batch import EbaySyncBatch
 from app.models.external_seller import ExternalSeller
-from app.repositories.cars import invalidate_in_memory_demo_cache, mark_expired_auctions
+from app.repositories.cars import (
+    car_to_api_item,
+    invalidate_in_memory_demo_cache,
+    load_car_by_id,
+    mark_expired_auctions,
+)
 from app.services.flip import estimate_flip_from_listing
+from app.services.html_sanitize import sanitize_listing_html
 from app.services.search_query import normalize_search_key
 
 logger = logging.getLogger(__name__)
@@ -100,6 +112,15 @@ def _parse_listing_ends_at(value: Any) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _utc_aware(dt: datetime | None) -> datetime | None:
+    """Normalize DB/API datetimes for comparison with UTC-aware `now`."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def _seller_external_id(item: dict[str, Any]) -> str | None:
@@ -281,6 +302,7 @@ def upsert_ebay_listing(
         "bid_count": bid_count_int,
         "listing_format": (item.get("listing_format") or "BUY_IT_NOW")[:50],
         "description_summary": ((item.get("description_summary") or title)[:512]),
+        "description_full": sanitize_listing_html(item.get("description_full")) or None,
         "api_synced_at": now,
         "seller_item_revision": item.get("seller_item_revision"),
     }
@@ -305,7 +327,15 @@ class EbayRefreshError(Exception):
     """Single-listing eBay refresh failed (not configured, not found, or API error)."""
 
 
-def refresh_car_from_ebay(db: Session, car_id: int) -> Car:
+@dataclass
+class RefreshCarOutcome:
+    deleted: bool = False
+    car: Car | None = None
+    car_id: int | None = None
+    message: str | None = None
+
+
+def refresh_car_from_ebay(db: Session, car_id: int) -> RefreshCarOutcome:
     """
     Re-fetch one eBay listing via getItem and upsert into DB.
     Does not use per-user sync cooldown.
@@ -324,10 +354,25 @@ def refresh_car_from_ebay(db: Session, car_id: int) -> Car:
     if not client.is_configured():
         raise EbayRefreshError("ebay_not_configured")
 
-    detail = client.get_item(ext_id)
-    if not detail:
+    result = client.get_item(ext_id)
+    if result.status == "not_found":
+        deleted_id = int(car.id)
+        db.delete(car)
+        try:
+            db.commit()
+            invalidate_in_memory_demo_cache()
+        except Exception as e:
+            db.rollback()
+            raise EbayRefreshError(f"commit_failed: {e}") from e
+        return RefreshCarOutcome(
+            deleted=True,
+            car_id=deleted_id,
+            message="This listing is no longer available on eBay and was removed from your inventory.",
+        )
+    if result.status != "ok" or not result.detail:
         raise EbayRefreshError("ebay_get_item_failed")
 
+    detail = result.detail
     summary = {
         "external_listing_id": ext_id,
         "title": (getattr(car, "description_summary", None) or f"{car.brand} {car.model}").strip(),
@@ -353,16 +398,63 @@ def refresh_car_from_ebay(db: Session, car_id: int) -> Car:
         db.rollback()
         raise EbayRefreshError(f"commit_failed: {e}") from e
     db.refresh(updated)
-    return updated
+    return RefreshCarOutcome(deleted=False, car=updated)
 
 
-def fetch_ebay_listings_for_sync(*, query: str) -> list[dict[str, Any]]:
-    """Call Browse API and return vehicle listings ready for upsert."""
+def _batch_ttl_hours() -> int:
+    try:
+        return max(1, int(os.getenv("EBAY_BATCH_TTL_HOURS", "24")))
+    except ValueError:
+        return 24
+
+
+def _get_active_batch(db: Session, user_id: int, search_key: str | None) -> EbaySyncBatch | None:
+    if not search_key:
+        return None
+    now = datetime.now(timezone.utc)
+    row = db.execute(
+        select(EbaySyncBatch).where(
+            EbaySyncBatch.user_id == user_id,
+            EbaySyncBatch.search_key == search_key,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    expires_at = _utc_aware(row.expires_at)
+    if expires_at and expires_at < now:
+        db.execute(delete(EbaySyncBatch).where(EbaySyncBatch.id == row.id))
+        db.flush()
+        return None
+    return row
+
+
+def ebay_batch_payload(batch: EbaySyncBatch | None) -> dict[str, Any]:
+    if batch is None:
+        return {
+            "pending_in_batch": 0,
+            "batch_size": 0,
+            "wave_size": ebay_wave_size(),
+            "batch_exhausted": True,
+            "can_fetch_new_batch": True,
+        }
+    summaries = batch.summaries_json if isinstance(batch.summaries_json, list) else []
+    total = len(summaries)
+    pending = max(0, total - int(batch.cursor or 0))
+    return {
+        "pending_in_batch": pending,
+        "batch_size": total,
+        "wave_size": ebay_wave_size(),
+        "batch_exhausted": pending == 0,
+        "can_fetch_new_batch": pending == 0,
+    }
+
+
+def search_listings_batch(*, query: str) -> list[dict[str, Any]]:
+    """Search-only eBay listings (vehicle filter), up to EBAY_BATCH_SIZE."""
     client = get_ebay_client()
     if not client.is_configured():
         return []
-    cap = ebay_fetch_cap()
-    raw = client.search_listings_enriched(query=query, limit=cap)
+    raw = client.search_listings(query=query, limit=ebay_batch_size())
     out: list[dict[str, Any]] = []
     for item in raw:
         if not is_likely_vehicle_listing(item):
@@ -373,7 +465,109 @@ def fetch_ebay_listings_for_sync(*, query: str) -> list[dict[str, Any]]:
     return out
 
 
-def sync_ebay_inventory(
+def _upsert_enriched_wave(
+    db: Session,
+    *,
+    batch: EbaySyncBatch,
+    ingest_search_key: str | None,
+) -> dict[str, Any]:
+    """getItem + DB upsert for the next wave slice; advance batch cursor."""
+    client = get_ebay_client()
+    summaries = batch.summaries_json if isinstance(batch.summaries_json, list) else []
+    wave = ebay_wave_size()
+    start = int(batch.cursor or 0)
+    end = min(start + wave, len(summaries))
+    slice_rows = summaries[start:end]
+
+    enriched_list = client.enrich_summaries(slice_rows) if slice_rows else []
+
+    synced = 0
+    skipped = 0
+    synced_car_ids: list[int] = []
+    wave_items: list[dict[str, Any]] = []
+
+    for merged in enriched_list:
+        if merged is None:
+            skipped += 1
+            continue
+        try:
+            with db.begin_nested():
+                car = upsert_ebay_listing(db, merged, ingest_search_key=ingest_search_key)
+            if car is None:
+                skipped += 1
+                continue
+            synced += 1
+            synced_car_ids.append(int(car.id))
+        except Exception as e:
+            logger.warning(
+                "eBay upsert failed for %s: %s",
+                merged.get("external_listing_id"),
+                e,
+            )
+            skipped += 1
+
+    batch.cursor = end
+    db.add(batch)
+
+    for car_id in synced_car_ids:
+        loaded = load_car_by_id(db, car_id)
+        if loaded is None:
+            continue
+        item = car_to_api_item(loaded)
+        if item is not None:
+            wave_items.append(item)
+
+    return {
+        "synced": synced,
+        "skipped": skipped,
+        "wave_items": wave_items,
+        "synced_car_ids": synced_car_ids,
+        "summaries_searched": len(slice_rows),
+    }
+
+
+def _save_batch(
+    db: Session,
+    *,
+    user_id: int,
+    search_key: str | None,
+    search_query: str,
+    summaries: list[dict[str, Any]],
+) -> EbaySyncBatch:
+    if not search_key:
+        search_key = ""
+    expires = datetime.now(timezone.utc) + timedelta(hours=_batch_ttl_hours())
+    existing = db.execute(
+        select(EbaySyncBatch).where(
+            EbaySyncBatch.user_id == user_id,
+            EbaySyncBatch.search_key == search_key,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        db.delete(existing)
+        db.flush()
+    batch = EbaySyncBatch(
+        user_id=user_id,
+        search_key=search_key,
+        search_query=search_query,
+        summaries_json=summaries,
+        cursor=0,
+        expires_at=expires,
+    )
+    db.add(batch)
+    db.flush()
+    return batch
+
+
+def _finalize_sync_commit(db: Session, *, user_id: int, enforce_cooldown: bool) -> None:
+    mark_expired_auctions(db)
+    db.commit()
+    invalidate_in_memory_demo_cache()
+    if enforce_cooldown:
+        mark_sync_completed(user_id)
+
+
+def start_ebay_batch(
     db: Session,
     *,
     user_id: int,
@@ -381,10 +575,7 @@ def sync_ebay_inventory(
     enforce_cooldown: bool = True,
 ) -> dict[str, Any]:
     """
-    Fetch listings from eBay, upsert into DB, return sync stats.
-
-    Raises EbaySyncCooldownError when called too soon for the same user.
-    On API/upsert failures returns status=failed without raising (caller serves DB inventory).
+    Search up to EBAY_BATCH_SIZE summaries, persist batch, enrich+upsert first wave only.
     """
     client = get_ebay_client()
     if not client.is_configured():
@@ -394,6 +585,7 @@ def sync_ebay_inventory(
             "configured": False,
             "status": "not_configured",
             "query": None,
+            "ebay_batch": ebay_batch_payload(None),
         }
 
     search_key = normalize_search_key(q)
@@ -402,64 +594,32 @@ def sync_ebay_inventory(
 
     search_q = build_ebay_search_query(q=q)
     try:
-        listings = fetch_ebay_listings_for_sync(query=search_q)
-        synced = 0
-        skipped = 0
-        for item in listings:
-            try:
-                with db.begin_nested():
-                    if upsert_ebay_listing(db, item, ingest_search_key=search_key) is not None:
-                        synced += 1
-                    else:
-                        skipped += 1
-            except Exception as e:
-                logger.warning(
-                    "eBay upsert failed for %s: %s",
-                    item.get("external_listing_id"),
-                    e,
-                )
-                skipped += 1
-
-        try:
-            mark_expired_auctions(db)
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            logger.error("eBay sync commit failed: %s", e)
-            return {
-                "synced": 0,
-                "skipped": skipped,
-                "configured": True,
-                "status": "failed",
-                "query": search_q,
-                "error": str(e),
-                "api_rows": len(listings),
-            }
-
-        if enforce_cooldown:
-            mark_sync_completed(user_id)
-
-        logger.info(
-            "eBay sync user=%s query=%r key=%r: %d upserted, %d skipped (api rows=%d)",
-            user_id,
-            search_q,
-            search_key,
-            synced,
-            skipped,
-            len(listings),
+        summaries = search_listings_batch(query=search_q)
+        batch = _save_batch(
+            db,
+            user_id=user_id,
+            search_key=search_key or "",
+            search_query=search_q,
+            summaries=summaries,
         )
+        wave_stats = _upsert_enriched_wave(db, batch=batch, ingest_search_key=search_key)
+        _finalize_sync_commit(db, user_id=user_id, enforce_cooldown=enforce_cooldown)
+        db.refresh(batch)
+
         return {
-            "synced": synced,
-            "skipped": skipped,
+            "synced": wave_stats["synced"],
+            "skipped": wave_stats["skipped"],
             "configured": True,
             "status": "ok",
             "query": search_q,
             "query_key": search_key,
-            "api_rows": len(listings),
+            "api_rows": len(summaries),
+            "wave_items": wave_stats["wave_items"],
+            "ebay_batch": ebay_batch_payload(batch),
         }
     except Exception as e:
         db.rollback()
-        logger.error("eBay sync failed query=%r: %s", search_q, e)
+        logger.error("eBay batch start failed query=%r: %s", search_q, e)
         return {
             "synced": 0,
             "skipped": 0,
@@ -468,4 +628,78 @@ def sync_ebay_inventory(
             "query": search_q,
             "error": str(e)[:500],
             "api_rows": 0,
+            "wave_items": [],
+            "ebay_batch": ebay_batch_payload(_get_active_batch(db, user_id, search_key)),
         }
+
+
+def continue_ebay_batch(
+    db: Session,
+    *,
+    user_id: int,
+    q: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Enrich the next wave from the active batch; if exhausted, start a new batch (new search).
+    No per-user cooldown.
+    """
+    client = get_ebay_client()
+    if not client.is_configured():
+        return {
+            "synced": 0,
+            "skipped": 0,
+            "configured": False,
+            "status": "not_configured",
+            "query": None,
+            "ebay_batch": ebay_batch_payload(None),
+            "wave_items": [],
+        }
+
+    search_key = normalize_search_key(q)
+    search_q = build_ebay_search_query(q=q)
+    batch = _get_active_batch(db, user_id, search_key)
+    summaries = batch.summaries_json if batch and isinstance(batch.summaries_json, list) else []
+    if batch is None or int(batch.cursor or 0) >= len(summaries):
+        stats = start_ebay_batch(db, user_id=user_id, q=q, enforce_cooldown=False)
+        stats["new_batch"] = True
+        return stats
+
+    try:
+        wave_stats = _upsert_enriched_wave(db, batch=batch, ingest_search_key=search_key)
+        _finalize_sync_commit(db, user_id=user_id, enforce_cooldown=False)
+        db.refresh(batch)
+        return {
+            "synced": wave_stats["synced"],
+            "skipped": wave_stats["skipped"],
+            "configured": True,
+            "status": "ok",
+            "query": search_q,
+            "query_key": search_key,
+            "wave_items": wave_stats["wave_items"],
+            "new_batch": False,
+            "ebay_batch": ebay_batch_payload(batch),
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error("eBay batch continue failed: %s", e)
+        return {
+            "synced": 0,
+            "skipped": 0,
+            "configured": True,
+            "status": "failed",
+            "query": search_q,
+            "error": str(e)[:500],
+            "wave_items": [],
+            "ebay_batch": ebay_batch_payload(_get_active_batch(db, user_id, search_key)),
+        }
+
+
+def sync_ebay_inventory(
+    db: Session,
+    *,
+    user_id: int,
+    q: Optional[str] = None,
+    enforce_cooldown: bool = True,
+) -> dict[str, Any]:
+    """Start a new eBay batch (search + first enrich wave)."""
+    return start_ebay_batch(db, user_id=user_id, q=q, enforce_cooldown=enforce_cooldown)

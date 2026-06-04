@@ -10,6 +10,7 @@ from app.models import (  # noqa: F401
     CarListingTerms,
     CarLocation,
     CarMedia,
+    EbaySyncBatch,
     ExternalSeller,
     User,
     UserAuditEvent,

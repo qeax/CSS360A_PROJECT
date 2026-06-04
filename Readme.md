@@ -95,7 +95,16 @@ Implementation: [backend/app/api/routes/auth.py](backend/app/api/routes/auth.py)
 
 ### Frontend
 
-Static assets under [frontend/](frontend/). Styles are loaded via [frontend/styles.css](frontend/styles.css) and partials in [frontend/css/](frontend/css/). Icons: [frontend/icons/](frontend/icons/) (MIT, Heroicons).
+Static assets under [frontend/](frontend/):
+
+| Path | Contents |
+|------|----------|
+| [frontend/pages/](frontend/pages/) | HTML pages (`index.html`, `login.html`, `car.html`, …) — served at short URLs via nginx rewrite |
+| [frontend/js/](frontend/js/) | Application scripts (`script.js`, `app-shell.js`, `listing-shared.js`, …) |
+| [frontend/css/](frontend/css/) | Stylesheets; entry point [frontend/css/styles.css](frontend/css/styles.css) |
+| [frontend/icons/](frontend/icons/) | SVG icons (MIT, Heroicons) |
+
+Nginx maps `/index.html` → `/pages/index.html` so public URLs stay unchanged.
 
 ---
 
@@ -121,6 +130,7 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `APP_PUBLIC_HOST` | Hostname for Traefik (no scheme), e.g. `app.example.com` |
 | `CORS_ORIGINS` | Required in prod: comma-separated browser origins |
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SANDBOX` | eBay ingest when UI sends `sync_ebay=true` (first load, Search) |
+| `EBAY_BATCH_SIZE`, `EBAY_WAVE_SIZE` | Staged eBay ingest: search pool size (default 150) and getItem wave (default 50, matches page size) |
 | `EBAY_DEFAULT_QUERY` | Default eBay search when the UI has no text query (default `car`) |
 | `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
 | `EBAY_SEARCH_LIMIT` | Max search hits per Browse page (default `50`) |
@@ -323,6 +333,7 @@ Serve `frontend/` with any static server on port 8080; Compose + Nginx is simple
 | `authentication_is_not_configured` on login | Bypass is off (`DEV_AUTH_BYPASS` false or `AZURE_AD_*` set) and login cannot proceed — configure Entra or enable bypass with empty `AZURE_AD_*` |
 | Empty inventory | Check DevTools for `401` on `/api/cars`; confirm session / bypass |
 | Port already in use | Change ports in `docker-compose.override.yml` |
+| `502` on `/api/*` (`connect() failed (111: Connection refused)`) | Backend is not listening yet or crashed — run `docker compose ps` and `docker compose logs backend --tail=80`; wait until `backend` is **healthy**, or `docker compose up -d` (restarts frontend/nginx after backend rebuild) |
 
 ---
 
@@ -419,7 +430,7 @@ Response: `{ "items": [...], "total": <number> }`. Filters apply to the full res
 
 | Query | Description |
 |-------|-------------|
-| `limit` | Page size (default **30**, max **50**) |
+| `limit` | Page size (default **50**, max **50**) |
 | `offset` | Starting index (default **0**) |
 | `sort_by` | e.g. `roi`, `net_profit`, `price` |
 | `sort_order` | `asc` or `desc` |
@@ -429,7 +440,22 @@ Response: `{ "items": [...], "total": <number> }`. Filters apply to the full res
 | `q` | Search across fields / fuzzy brand+model |
 | `radius_mi` + `anchor_lat` / `anchor_lng` | Radius in miles |
 
-The UI loads more pages with **Load more**. `GET /api/cars/meta` exposes slider bounds, makes, `vehicle_titles`, and locations for the filter UI.
+The UI loads more pages with **Load more** (50 listings per page). Inventory is served as a **sorted queue** from MySQL after filters: each search or Load more may enrich up to **50** eBay listings via `getItem`, upsert them, then return the next slice from the full filtered+sorted list. Returning from **Settings** restores the previous results from `sessionStorage` without re-running eBay sync. `GET /api/cars/meta` exposes slider bounds, makes, `vehicle_titles`, and locations for the filter UI.
+
+### Listing detail page (`car.html`)
+
+- URL: `car.html?id={car_id}` with optional `return=` for the back link.
+- `GET /api/cars/{car_id}` returns the standard card fields plus `description_html` (bleach-sanitized), `description_summary`, geocoded `location.latitude` / `location.longitude`, optional `location.boundary_geojson` (region outline), and `is_watched`.
+- Gallery uses PhotoSwipe lightbox; location uses Leaflet + OpenStreetMap with a **region boundary** highlight (not a pin) when Nominatim returns polygon data.
+- **Settings → Open listings in full page** toggles card click behavior (default: full page; off = legacy modal on index).
+
+### Watchlist and notifications
+
+- Each user may track up to **10** listings (`POST/DELETE /api/watchlist/{car_id}`, `GET /api/watchlist`, `GET /api/watchlist/ids`).
+- Profile page shows **Tracked listings** with list/grid view.
+- In-app notifications (`GET /api/notifications`, badge in top bar) are created when tracked listings change (price, description, auction end, removed, etc.).
+- `POST /api/watchlist/check` runs after sign-in when due (daily, or more often for auctions ending within 24h). Notifications older than **7 days** are purged on read.
+- Optional env: `NOMINATIM_USER_AGENT` — **recommended in production** for geocoding and region boundaries on the car detail map.
 
 ### Local Alembic
 

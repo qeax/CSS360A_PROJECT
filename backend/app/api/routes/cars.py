@@ -23,14 +23,17 @@ from app.repositories.cars import (
 from app.services.ebay_sync import (
     EbayRefreshError,
     EbaySyncCooldownError,
+    _get_active_batch,
+    continue_ebay_batch,
+    ebay_batch_payload,
     refresh_car_from_ebay,
-    sync_ebay_inventory,
+    start_ebay_batch,
 )
 from app.services.search_query import normalize_search_key
 
 router = APIRouter(tags=["cars"])
 
-_DEFAULT_PAGE_SIZE = 30
+_DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 50
 
 
@@ -39,11 +42,55 @@ def _resolve_data_mode(sync_ebay: bool, sync_stats: dict[str, Any] | None) -> st
         return "database"
     if sync_stats is None:
         return "database"
+    if sync_stats is None:
+        return "database"
     if not sync_stats.get("configured"):
         return "database"
     if sync_stats.get("status") == "ok":
         return "ebay_refreshed"
     return "database"
+
+
+@router.get("/cars/meta")
+def get_cars_meta(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    try:
+        return compute_inventory_meta(db)
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+
+
+@router.get("/cars/{car_id}")
+def get_car_detail(
+    car_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.repositories.cars import car_to_detail_api_item
+
+    car = load_car_by_id(db, car_id)
+    if car is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    try:
+        item = car_to_detail_api_item(db, car, user_id=int(current_user.id), geocode=False)
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "car_detail_failed", "message": str(e)},
+        ) from e
+    if item is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    return {"item": item}
 
 
 @router.get("/cars/{car_id}/raw-listing")
@@ -65,7 +112,7 @@ def refresh_car_ebay(
     _current_user: User = Depends(get_current_user),
 ):
     try:
-        refresh_car_from_ebay(db, car_id)
+        outcome = refresh_car_from_ebay(db, car_id)
     except EbayRefreshError as e:
         code = str(e)
         if code == "car_not_found":
@@ -81,6 +128,13 @@ def refresh_car_ebay(
             status_code=503,
             detail={"error": "database_unavailable", "message": str(e)},
         ) from e
+
+    if outcome.deleted:
+        return {
+            "deleted": True,
+            "id": outcome.car_id,
+            "message": outcome.message,
+        }
 
     car = load_car_by_id(db, car_id)
     if car is None:
@@ -111,20 +165,6 @@ def delete_car(
             detail={"error": "database_unavailable", "message": str(e)},
         ) from e
     return Response(status_code=204)
-
-
-@router.get("/cars/meta")
-def get_cars_meta(
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
-):
-    try:
-        return compute_inventory_meta(db)
-    except SQLAlchemyError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "database_unavailable", "message": str(e)},
-        ) from e
 
 
 @router.get("/cars")
@@ -161,20 +201,54 @@ def get_cars(
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("desc"),
     sync_ebay: bool = Query(False),
+    ebay_batch_continue: bool = Query(False),
     limit: int = Query(_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     sync_stats: dict | None = None
-    if sync_ebay:
+    user_id = int(current_user.id)
+    search_key = normalize_search_key(q)
+
+    if ebay_batch_continue:
         if not get_ebay_client().is_configured():
-            sync_stats = {"synced": 0, "configured": False, "skipped": True}
+            sync_stats = {
+                "synced": 0,
+                "configured": False,
+                "skipped": True,
+                "status": "not_configured",
+                "wave_items": [],
+                "ebay_batch": ebay_batch_payload(None),
+            }
         else:
             try:
-                sync_stats = sync_ebay_inventory(
+                sync_stats = continue_ebay_batch(db, user_id=user_id, q=q)
+            except Exception as e:
+                db.rollback()
+                sync_stats = {
+                    "synced": 0,
+                    "configured": True,
+                    "status": "failed",
+                    "error": str(e)[:500],
+                    "wave_items": [],
+                    "ebay_batch": ebay_batch_payload(_get_active_batch(db, user_id, search_key)),
+                }
+    elif sync_ebay:
+        if not get_ebay_client().is_configured():
+            sync_stats = {
+                "synced": 0,
+                "configured": False,
+                "skipped": True,
+                "status": "not_configured",
+                "wave_items": [],
+                "ebay_batch": ebay_batch_payload(None),
+            }
+        else:
+            try:
+                sync_stats = start_ebay_batch(
                     db,
-                    user_id=int(current_user.id),
+                    user_id=user_id,
                     q=q,
                 )
             except EbaySyncCooldownError as e:
@@ -192,10 +266,11 @@ def get_cars(
                     "configured": True,
                     "status": "failed",
                     "error": str(e)[:500],
+                    "wave_items": [],
+                    "ebay_batch": ebay_batch_payload(_get_active_batch(db, user_id, search_key)),
                 }
 
     try:
-        search_key = normalize_search_key(q)
         rows = load_inventory_for_request(db, search_key=search_key)
     except SQLAlchemyError as e:
         raise HTTPException(
@@ -242,12 +317,20 @@ def get_cars(
     sort_car_dicts_inplace(results, effective_sort, sort_order)
     total = len(results)
     page = results[offset : offset + limit]
+    data_mode = _resolve_data_mode(sync_ebay or ebay_batch_continue, sync_stats)
     payload: dict = {
         "items": page,
         "total": total,
         "inventory_source": "database",
-        "data_mode": _resolve_data_mode(sync_ebay, sync_stats),
+        "data_mode": data_mode,
     }
     if sync_stats is not None:
         payload["ebay_sync"] = sync_stats
+        if sync_stats.get("ebay_batch") is not None:
+            payload["ebay_batch"] = sync_stats["ebay_batch"]
+    else:
+        batch = _get_active_batch(db, user_id, search_key)
+        if batch is not None:
+            payload["ebay_batch"] = ebay_batch_payload(batch)
+
     return payload

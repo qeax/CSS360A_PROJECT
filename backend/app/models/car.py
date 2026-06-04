@@ -98,3 +98,8 @@ class Car(Base):
         back_populates="car",
         cascade="all, delete-orphan",
     )
+    watchlist_items = relationship(
+        "UserWatchlistItem",
+        back_populates="car",
+        cascade="all, delete-orphan",
+    )

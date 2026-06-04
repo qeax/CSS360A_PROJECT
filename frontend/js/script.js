@@ -4,7 +4,9 @@
 
 const VIEW_STORAGE_KEY = 'inventory_view';
 const SORT_DESC_KEY = 'inventory_sort_desc';
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 50;
+const INVENTORY_SESSION_KEY = 'css360_inventory_session_v1';
+const INVENTORY_SESSION_TTL_MS = 30 * 60 * 1000;
 const LOCATION_NOT_SPECIFIED = '__not_specified__';
 const LOCATION_NOT_SPECIFIED_LABEL = 'Not specified';
 const MAX_CAROUSEL_DOTS = 7;
@@ -19,6 +21,11 @@ let inventoryMeta = null;
 let sortDesc = true;
 let lastDataMode = 'database';
 let auctionCountdownTimerId = null;
+/** @type {{ pending_in_batch: number, batch_size: number, wave_size: number, batch_exhausted: boolean, can_fetch_new_batch: boolean } | null} */
+let ebayBatchMeta = null;
+
+/** @type {Set<number>} */
+let watchlistIds = new Set();
 
 /** Center of a 7-dot strip (the 4th dot, 1-based). */
 const CAROUSEL_DOTS_CENTER_IDX = 3;
@@ -146,6 +153,43 @@ function isPriceKnown(car) {
     return car && car.price_known !== false;
 }
 
+function shouldShowEconomics(car) {
+    return isPriceKnown(car) && !car.auction_ended;
+}
+
+/**
+ * @param {string} message
+ * @param {{ variant?: 'error' | 'warn', durationMs?: number }} [opts]
+ */
+function showEbayToast(message, opts = {}) {
+    const stack = document.getElementById('appToastStack');
+    if (!stack || !message) return;
+    const variant = opts.variant === 'warn' ? 'warn' : 'error';
+    const el = document.createElement('div');
+    el.className = `app-toast app-toast--${variant}`;
+    el.setAttribute('role', 'status');
+    el.textContent = message;
+    stack.appendChild(el);
+    const duration = opts.durationMs ?? 5000;
+    window.setTimeout(() => {
+        el.classList.add('is-hiding');
+        window.setTimeout(() => el.remove(), 400);
+    }, duration);
+}
+
+function resolveEbayBatchMeta(payload) {
+    if (payload?.ebay_batch) return payload.ebay_batch;
+    if (payload?.ebay_sync?.ebay_batch) return payload.ebay_sync.ebay_batch;
+    return ebayBatchMeta;
+}
+
+function loadMoreUsesEbayBatch() {
+    if (!ebayBatchMeta) return false;
+    if (ebayBatchMeta.pending_in_batch > 0) return true;
+    if (carData.length >= listTotal && ebayBatchMeta.can_fetch_new_batch) return true;
+    return false;
+}
+
 function formatRoiDisplay(car) {
     if (!isPriceKnown(car) || car.roi == null || Number.isNaN(Number(car.roi))) {
         return 'Unable to determine';
@@ -161,12 +205,10 @@ function formatProfitDisplay(car) {
 }
 
 function metricsBlockHtml(car) {
-    const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
-    if (!isPriceKnown(car)) {
-        return `<div class="car-card-metrics-compact car-card-metrics-compact--unknown" style="${metricsBlockHeatStyle(null, false)}">
-            <p class="car-card-metrics-unknown-msg">Unable to determine ROI and net profit</p>
-        </div>`;
+    if (!shouldShowEconomics(car)) {
+        return '';
     }
+    const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
     const profitCls = profitValueClass(car.net_profit);
     return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true)}">
             <div class="car-card-metrics-col car-card-metrics-col--roi">
@@ -249,6 +291,10 @@ function formatAuctionCountdown(iso) {
 }
 
 function stopAuctionCountdownTimer() {
+    if (window.Css360Listing?.stopAuctionCountdownTimer) {
+        window.Css360Listing.stopAuctionCountdownTimer();
+        return;
+    }
     if (auctionCountdownTimerId != null) {
         clearInterval(auctionCountdownTimerId);
         auctionCountdownTimerId = null;
@@ -271,6 +317,10 @@ function tickAuctionCountdowns() {
 }
 
 function ensureAuctionCountdownTimer() {
+    if (window.Css360Listing?.startAuctionCountdownTimer) {
+        window.Css360Listing.startAuctionCountdownTimer();
+        return;
+    }
     stopAuctionCountdownTimer();
     if (!document.querySelector('#inventoryList [data-countdown-end]')) return;
     tickAuctionCountdowns();
@@ -722,7 +772,7 @@ function initFilterDropdowns() {
     });
 }
 
-function populateMetaIntoUi(meta) {
+function populateMetaIntoUi(meta, resetValues = true) {
     inventoryMeta = meta;
     const pmin = document.getElementById('filterPriceMin');
     const pmax = document.getElementById('filterPriceMax');
@@ -741,9 +791,11 @@ function populateMetaIntoUi(meta) {
             el.min = String(lo);
             el.max = String(hi);
         });
-        pmin.value = String(lo);
-        pmax.value = String(hi);
-        updateDualRangeLabels('price', lo, hi);
+        if (resetValues) {
+            pmin.value = String(lo);
+            pmax.value = String(hi);
+            updateDualRangeLabels('price', lo, hi);
+        }
     }
     if (ymin && ymax) {
         let yLo = Number(meta.min_year);
@@ -756,9 +808,11 @@ function populateMetaIntoUi(meta) {
         ymin.max = String(yHi);
         ymax.min = String(yLo);
         ymax.max = String(yHi);
-        ymin.value = String(yLo);
-        ymax.value = String(yHi);
-        updateDualRangeLabels('year', yLo, yHi);
+        if (resetValues) {
+            ymin.value = String(yLo);
+            ymax.value = String(yHi);
+            updateDualRangeLabels('year', yLo, yHi);
+        }
     }
     if (mmin && mmax && meta.min_mileage != null && meta.max_mileage != null) {
         let lo = Number(meta.min_mileage);
@@ -774,25 +828,34 @@ function populateMetaIntoUi(meta) {
             el.min = String(loR);
             el.max = String(hiR);
         });
-        mmin.value = String(loR);
-        mmax.value = String(hiR);
-        updateDualRangeLabels('mileage', loR, hiR);
+        if (resetValues) {
+            mmin.value = String(loR);
+            mmax.value = String(hiR);
+            updateDualRangeLabels('mileage', loR, hiR);
+        }
     }
 
-    buildChipGroup('filterBodyTypes', FILTER_BODY_STYLES, (x) => x, (x) => x);
-    buildChipGroup('filterConditions', FILTER_CONDITIONS, (x) => x, (x) => x);
-    buildChipGroup(
-        'filterListingFormats',
-        FILTER_LISTING_FORMATS,
-        (x) => x.value,
-        (x) => x.label
-    );
-    buildChipGroup('filterVehicleTitles', FILTER_VEHICLE_TITLES, (x) => x, (x) => x);
+    const chipsMissing = !document.getElementById('filterBodyTypes')?.childElementCount;
+    if (resetValues || chipsMissing) {
+        buildChipGroup('filterBodyTypes', FILTER_BODY_STYLES, (x) => x, (x) => x);
+        buildChipGroup('filterConditions', FILTER_CONDITIONS, (x) => x, (x) => x);
+        buildChipGroup(
+            'filterListingFormats',
+            FILTER_LISTING_FORMATS,
+            (x) => x.value,
+            (x) => x.label
+        );
+        buildChipGroup('filterVehicleTitles', FILTER_VEHICLE_TITLES, (x) => x, (x) => x);
 
-    buildChipGroup('filterDelivery', DELIVERY_CHIPS, (x) => x.value, (x) => x.label);
-    updateLocationTriggerLabels();
-    updateMakeTriggerLabel();
-    updateLocationTierUi();
+        buildChipGroup('filterDelivery', DELIVERY_CHIPS, (x) => x.value, (x) => x.label);
+        updateLocationTriggerLabels();
+        updateMakeTriggerLabel();
+        updateLocationTierUi();
+    }
+    renderCountryPanel();
+    renderMakePanel();
+    refreshRegionOptions();
+    refreshCityOptions();
 }
 
 function updateDualRangeLabels(kind, minV, maxV) {
@@ -900,8 +963,179 @@ async function fetchMeta() {
         window.location.replace('login.html');
         return null;
     }
-    if (!res.ok) return null;
+    if (!res.ok) {
+        console.warn('fetchMeta failed:', res.status);
+        return null;
+    }
     return res.json();
+}
+
+function collectFilterSnapshot() {
+    const radiusWrap = document.getElementById('radiusFilterWrap');
+    return {
+        globalSearch: document.getElementById('globalSearchInput')?.value ?? '',
+        sortBy: document.getElementById('frontendSortBy')?.value ?? 'roi',
+        sortDesc,
+        locSelection: {
+            countries: Array.from(locSelection.countries),
+            regions: Array.from(locSelection.regions),
+            cities: Array.from(locSelection.cities),
+        },
+        makes: Array.from(makeSelection),
+        chips: {
+            filterBodyTypes: getSelectedChipValues('filterBodyTypes'),
+            filterConditions: getSelectedChipValues('filterConditions'),
+            filterListingFormats: getSelectedChipValues('filterListingFormats'),
+            filterVehicleTitles: getSelectedChipValues('filterVehicleTitles'),
+            filterDelivery: getSelectedChipValues('filterDelivery'),
+        },
+        priceMin: document.getElementById('filterPriceMin')?.value ?? '',
+        priceMax: document.getElementById('filterPriceMax')?.value ?? '',
+        yearMin: document.getElementById('filterYearMin')?.value ?? '',
+        yearMax: document.getElementById('filterYearMax')?.value ?? '',
+        mileageMin: document.getElementById('filterMileageMin')?.value ?? '',
+        mileageMax: document.getElementById('filterMileageMax')?.value ?? '',
+        minRoi: document.getElementById('filterMinRoi')?.value ?? '',
+        minProfit: document.getElementById('filterMinProfit')?.value ?? '',
+        excludeNegativeProfit: document.getElementById('filterExcludeNegativeProfit')?.checked ?? false,
+        excludeEndedAuctions: document.getElementById('filterExcludeEndedAuctions')?.checked ?? true,
+        excludeUnknownPrice: document.getElementById('filterExcludeUnknownPrice')?.checked ?? false,
+        radiusMi: document.getElementById('filterRadiusMi')?.value ?? '',
+        anchorLat: radiusWrap?.dataset.anchorLat ?? '',
+        anchorLng: radiusWrap?.dataset.anchorLng ?? '',
+    };
+}
+
+function applyFilterSnapshot(snapshot) {
+    if (!snapshot) return;
+    const searchInput = document.getElementById('globalSearchInput');
+    if (searchInput) searchInput.value = snapshot.globalSearch ?? '';
+    const sortEl = document.getElementById('frontendSortBy');
+    if (sortEl && snapshot.sortBy) sortEl.value = snapshot.sortBy;
+    if (typeof snapshot.sortDesc === 'boolean') {
+        sortDesc = snapshot.sortDesc;
+        localStorage.setItem(SORT_DESC_KEY, sortDesc ? 'true' : 'false');
+        applySortOrderClass();
+    }
+    locSelection.countries = new Set(snapshot.locSelection?.countries ?? []);
+    locSelection.regions = new Set(snapshot.locSelection?.regions ?? []);
+    locSelection.cities = new Set(snapshot.locSelection?.cities ?? []);
+    makeSelection.clear();
+    (snapshot.makes ?? []).forEach((m) => makeSelection.add(m));
+
+    const chipMap = snapshot.chips ?? {};
+    Object.entries(chipMap).forEach(([containerId, values]) => {
+        const root = document.getElementById(containerId);
+        if (!root) return;
+        const selected = new Set(values);
+        root.querySelectorAll('.filter-chip').forEach((btn) => {
+            btn.setAttribute('aria-pressed', selected.has(btn.dataset.value) ? 'true' : 'false');
+        });
+    });
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined && val !== '') el.value = String(val);
+    };
+    setVal('filterPriceMin', snapshot.priceMin);
+    setVal('filterPriceMax', snapshot.priceMax);
+    setVal('filterYearMin', snapshot.yearMin);
+    setVal('filterYearMax', snapshot.yearMax);
+    setVal('filterMileageMin', snapshot.mileageMin);
+    setVal('filterMileageMax', snapshot.mileageMax);
+    setVal('filterMinRoi', snapshot.minRoi);
+    setVal('filterMinProfit', snapshot.minProfit);
+    setVal('filterRadiusMi', snapshot.radiusMi);
+
+    const exProfit = document.getElementById('filterExcludeNegativeProfit');
+    if (exProfit) exProfit.checked = !!snapshot.excludeNegativeProfit;
+    const exEnded = document.getElementById('filterExcludeEndedAuctions');
+    if (exEnded) exEnded.checked = snapshot.excludeEndedAuctions !== false;
+    const exUnknown = document.getElementById('filterExcludeUnknownPrice');
+    if (exUnknown) exUnknown.checked = !!snapshot.excludeUnknownPrice;
+
+    const radiusWrap = document.getElementById('radiusFilterWrap');
+    if (radiusWrap && snapshot.anchorLat && snapshot.anchorLng) {
+        radiusWrap.dataset.anchorLat = snapshot.anchorLat;
+        radiusWrap.dataset.anchorLng = snapshot.anchorLng;
+    }
+
+    updateDualRangeLabels('price', Number(snapshot.priceMin), Number(snapshot.priceMax));
+    updateDualRangeLabels('year', Number(snapshot.yearMin), Number(snapshot.yearMax));
+    updateDualRangeLabels('mileage', Number(snapshot.mileageMin), Number(snapshot.mileageMax));
+    const rlab = document.getElementById('filterRadiusMiLabel');
+    if (rlab && snapshot.radiusMi) rlab.textContent = snapshot.radiusMi;
+
+    refreshRegionOptions();
+    refreshCityOptions();
+    updateRadiusAvailability();
+    updateLocationTierUi();
+    updateLocationTriggerLabels();
+    updateMakeTriggerLabel();
+}
+
+function saveInventorySession() {
+    try {
+        const payload = {
+            carData,
+            listTotal,
+            ebayBatchMeta,
+            lastDataMode,
+            filters: collectFilterSnapshot(),
+            scrollY: window.scrollY,
+            savedAt: Date.now(),
+        };
+        sessionStorage.setItem(INVENTORY_SESSION_KEY, JSON.stringify(payload));
+    } catch (err) {
+        console.warn('Failed to save inventory session', err);
+    }
+}
+
+function clearInventorySession() {
+    try {
+        sessionStorage.removeItem(INVENTORY_SESSION_KEY);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function restoreInventorySession() {
+    try {
+        const raw = sessionStorage.getItem(INVENTORY_SESSION_KEY);
+        if (!raw) return false;
+        const payload = JSON.parse(raw);
+        if (!payload?.savedAt || Date.now() - payload.savedAt > INVENTORY_SESSION_TTL_MS) {
+            clearInventorySession();
+            return false;
+        }
+        if (!Array.isArray(payload.carData) || payload.carData.length === 0) {
+            clearInventorySession();
+            return false;
+        }
+
+        carData = payload.carData;
+        currentResults = carData;
+        listTotal = typeof payload.listTotal === 'number' ? payload.listTotal : carData.length;
+        ebayBatchMeta = payload.ebayBatchMeta ?? null;
+        lastDataMode = payload.lastDataMode ?? 'database';
+
+        applyFilterSnapshot(payload.filters);
+        updateUI(currentResults);
+        updateResultsHintAndLoadMore();
+
+        const list = document.getElementById('inventoryList');
+        list?.removeAttribute('aria-busy');
+        list && (list.style.opacity = '');
+
+        if (typeof payload.scrollY === 'number') {
+            requestAnimationFrame(() => window.scrollTo(0, payload.scrollY));
+        }
+        return true;
+    } catch (err) {
+        console.warn('Failed to restore inventory session', err);
+        clearInventorySession();
+        return false;
+    }
 }
 
 function updateResultsHintAndLoadMore() {
@@ -909,9 +1143,12 @@ function updateResultsHintAndLoadMore() {
     const wrap = document.getElementById('inventoryLoadMoreWrap');
     const btn = document.getElementById('loadMoreBtn');
     const dbSuffix = lastDataMode === 'database' ? ' (Database mode)' : '';
+    const pendingBatch = ebayBatchMeta?.pending_in_batch ?? 0;
     if (hint) {
-        if (listTotal === 0) {
-            hint.textContent = carData.length === 0 ? 'No listings match your filters.' : '';
+        if (listTotal === 0 && carData.length === 0) {
+            hint.textContent = 'No listings match your filters.';
+        } else if (pendingBatch > 0) {
+            hint.textContent = `Showing ${carData.length} listing${carData.length === 1 ? '' : 's'} · ${pendingBatch} more ready from eBay${dbSuffix}`;
         } else if (carData.length >= listTotal) {
             hint.textContent = `Showing all ${listTotal} listing${listTotal === 1 ? '' : 's'}${dbSuffix}`;
         } else {
@@ -919,10 +1156,14 @@ function updateResultsHintAndLoadMore() {
         }
     }
     if (wrap && btn) {
-        const hasMore = listTotal > 0 && carData.length < listTotal;
+        const hasDbMore = listTotal > 0 && carData.length < listTotal;
+        const hasEbayMore = loadMoreUsesEbayBatch();
+        const hasMore = hasDbMore || hasEbayMore;
         wrap.hidden = !hasMore;
         btn.disabled = !hasMore;
-        if (!btn.dataset.loading) btn.textContent = 'Load more';
+        if (!btn.dataset.loading) {
+            btn.textContent = pendingBatch > 0 ? 'Load more from eBay' : 'Load more';
+        }
     }
 }
 
@@ -932,13 +1173,19 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
     const loadBtn = document.getElementById('loadMoreBtn');
     const q = document.getElementById('globalSearchInput')?.value.trim() || '';
     const effectiveSyncEbay = !append && (syncEbay || !q);
+    const useBatchContinue = append && loadMoreUsesEbayBatch();
     const shouldScrollToTop = scrollToTop ?? !append;
 
     if (!append) {
+        clearInventorySession();
         stopAuctionCountdownTimer();
         list.style.opacity = '0.55';
         list.setAttribute('aria-busy', 'true');
-        const loadingLabel = effectiveSyncEbay ? 'Updating from eBay…' : 'Loading inventory…';
+        const loadingLabel = effectiveSyncEbay
+            ? 'Updating from eBay…'
+            : useBatchContinue
+              ? 'Loading more from eBay…'
+              : 'Loading inventory…';
         const spinner = '<span class="loading-spinner" aria-hidden="true"></span>';
         list.innerHTML = `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`;
     } else if (loadBtn) {
@@ -949,7 +1196,11 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
 
     const query = new URL('/api/cars', window.location.origin);
     if (q) query.searchParams.set('q', q);
-    if (effectiveSyncEbay) query.searchParams.set('sync_ebay', 'true');
+    if (effectiveSyncEbay) {
+        query.searchParams.set('sync_ebay', 'true');
+    } else if (useBatchContinue) {
+        query.searchParams.set('ebay_batch_continue', 'true');
+    }
 
     appendMultiParams(query, 'countries', Array.from(locSelection.countries));
     appendMultiParams(query, 'regions', Array.from(locSelection.regions));
@@ -1045,6 +1296,7 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
             } catch (_) {
                 /* ignore */
             }
+            showEbayToast(msg, { variant: 'warn' });
             if (hint) hint.textContent = msg;
             const fallbackUrl = new URL(query);
             fallbackUrl.searchParams.delete('sync_ebay');
@@ -1055,15 +1307,18 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
         const items = Array.isArray(payload.items) ? payload.items : [];
         listTotal = typeof payload.total === 'number' ? payload.total : items.length;
         lastDataMode = payload.data_mode === 'ebay_refreshed' ? 'ebay_refreshed' : 'database';
-        if (
-            syncEbay &&
-            lastDataMode === 'database' &&
-            payload.ebay_sync?.status === 'failed' &&
-            hint &&
-            !hint.textContent.includes('cooldown')
-        ) {
-            hint.textContent = 'eBay sync failed; showing saved listings.';
+        ebayBatchMeta = resolveEbayBatchMeta(payload);
+
+        if (payload.ebay_sync?.status === 'failed') {
+            const errMsg =
+                payload.ebay_sync.error ||
+                'eBay sync failed; showing saved listings.';
+            showEbayToast(String(errMsg), { variant: 'error' });
+            if (hint && !hint.textContent.includes('cooldown')) {
+                hint.textContent = 'eBay sync failed; showing saved listings.';
+            }
         }
+
         if (append) {
             carData = carData.concat(items);
         } else {
@@ -1072,12 +1327,18 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
         currentResults = carData;
         updateUI(currentResults);
         updateResultsHintAndLoadMore();
+        saveInventorySession();
         if (!append && shouldScrollToTop) {
             requestAnimationFrame(() => scrollInventoryToTop());
         }
         list.removeAttribute('aria-busy');
     } catch (err) {
         console.error('Search failed:', err);
+        if (effectiveSyncEbay || useBatchContinue) {
+            showEbayToast('Unable to reach eBay or the server. Showing saved listings if available.', {
+                variant: 'error',
+            });
+        }
         let recovered = false;
         if (!append) {
             const fallbackUrl = new URL(query);
@@ -1400,6 +1661,7 @@ function modalVehicleDetailsHtml(car) {
 
 function updateUI(items) {
     const list = document.getElementById('inventoryList');
+    const L = window.Css360Listing;
     if (items.length === 0) {
         stopAuctionCountdownTimer();
         list.innerHTML = '<div class="no-results"><div>No matches. Try widening filters or search.</div></div>';
@@ -1407,92 +1669,89 @@ function updateUI(items) {
     }
 
     list.innerHTML = items
-        .map((car) => {
-            return `
-            <article class="car-card" data-car-id="${car.id}">
-                <div class="car-card-media">
-                    ${carouselHtml(car)}
-                </div>
-                <div class="car-card-body">
-                    <div class="car-card-title-row">
-                        <div class="car-card-title-year-col">
-                            <span class="car-year-pill">${car.year != null ? escapeHtml(String(car.year)) : '—'}</span>
-                        </div>
-                        <span class="car-card-title-vrule" aria-hidden="true"></span>
-                        <div class="car-card-title-main">
-                            <h3 class="car-model">${escapeHtml(car.brand)} ${escapeHtml(car.model)}</h3>
-                            <p class="car-card-subtitle">${escapeHtml(carSubtitleLine(car))}</p>
-                        </div>
-                    </div>
-                    <div class="car-card-divider" aria-hidden="true"></div>
-                    <div class="car-card-specs">${specLines(car)}</div>
-                    <div class="car-card-divider" aria-hidden="true"></div>
-                    <div class="car-card-footer">
-                        <div class="car-card-footer-start">
-                            ${priceBlockHtml(car)}
-                            ${listingLinkHtml(car, 'car-card-listing-link car-card-listing-link--footer')}
-                        </div>
-                        ${metricsBlockHtml(car)}
-                    </div>
-                </div>
-            </article>`;
-        })
+        .map((car) =>
+            L.buildCarCardHtml(car, {
+                showWatchButton: true,
+                isWatched: watchlistIds.has(car.id),
+            }),
+        )
         .join('');
 
     list.querySelectorAll('.car-card').forEach((card) => {
         card.addEventListener('click', (e) => {
-            if (e.target.closest('.car-card-carousel-nav, .car-card-carousel-dot, .car-card-listing-link')) {
+            if (
+                e.target.closest(
+                    '.car-card-carousel-nav, .car-card-carousel-dot, .car-card-listing-link, .car-card-watch-btn',
+                )
+            ) {
                 return;
             }
-            const carId = Number(card.dataset.carId);
-            const car = items.find((c) => c.id === carId);
-            if (car) showCarDetails(car);
+            const carId = parseCarId(card.dataset.carId);
+            const car = items.find((c) => parseCarId(c.id) === carId);
+            if (car) openListingDetail(car);
         });
     });
 
-    list.querySelectorAll('[data-carousel]').forEach((root) => {
-        const strip = root.querySelector('.car-card-carousel-strip');
-        const imgs = strip ? Array.from(strip.querySelectorAll('.car-card-carousel-img')) : [];
-        const count = imgs.length;
-        if (count < 2) return;
-        let idx = 0;
-        const dotsBox = root.querySelector('.car-card-carousel-dots');
-        const show = (nextIndex, direction) => {
-            const prev = idx;
-            idx = (nextIndex + count) % count;
-            if (strip) {
-                strip.classList.remove('is-anim-left', 'is-anim-right');
-                strip.style.transform = `translate3d(-${idx * 100}%, 0, 0)`;
-                if (direction === 'next') strip.classList.add('is-anim-right');
-                else if (direction === 'prev') strip.classList.add('is-anim-left');
-            }
-            refreshCarouselDots(dotsBox, count, idx, direction);
-            root.dataset.slideIndex = String(idx);
-            if (prev !== idx) root.dataset.slideDir = direction || '';
-        };
-        root.querySelector('.car-card-carousel-nav--prev')?.addEventListener('click', (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            show(idx - 1, 'prev');
+    list.querySelectorAll('.car-card-watch-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const carId = Number(btn.dataset.carId);
+            if (carId) toggleWatchlistCar(carId, btn);
         });
-        root.querySelector('.car-card-carousel-nav--next')?.addEventListener('click', (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            show(idx + 1, 'next');
-        });
-        dotsBox?.addEventListener('click', (ev) => {
-            const d = ev.target.closest('.car-card-carousel-dot');
-            if (!d) return;
-            ev.preventDefault();
-            ev.stopPropagation();
-            const target = Number(d.dataset.slideTo);
-            const dir = target > idx ? 'next' : target < idx ? 'prev' : null;
-            show(target, dir);
-        });
-        if (strip) strip.style.transform = 'translate3d(0, 0, 0)';
-        applyCarouselDotsMode(dotsBox, carouselDotWindow(count, 0).mode);
     });
+
+    L.initCarouselsIn(list);
     ensureAuctionCountdownTimer();
+}
+
+async function fetchWatchlistIds() {
+    try {
+        const res = await fetch('/api/watchlist/ids', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        watchlistIds = new Set(data.ids || []);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function openListingDetail(car) {
+    const carId = parseCarId(car?.id);
+    if (!carId) return;
+    const mode = getSettings().listingDetailMode;
+    if (mode === 'page') {
+        const returnUrl = `${window.location.pathname}${window.location.search}`;
+        window.location.href = `/car.html?id=${carId}&return=${encodeURIComponent(returnUrl)}`;
+        return;
+    }
+    showCarDetails(car);
+}
+
+async function toggleWatchlistCar(carId, btn) {
+    const isWatched = watchlistIds.has(carId);
+    try {
+        const res = await fetch(`/api/watchlist/${carId}`, {
+            method: isWatched ? 'DELETE' : 'POST',
+            credentials: 'include',
+        });
+        if (res.status === 409) {
+            showEbayToast(
+                'You can track at most 10 listings. Remove one from Profile first.',
+                { variant: 'warn' },
+            );
+            return;
+        }
+        if (!res.ok) return;
+        if (isWatched) watchlistIds.delete(carId);
+        else watchlistIds.add(carId);
+        const next = !isWatched;
+        btn.classList.toggle('is-watched', next);
+        btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        btn.setAttribute('aria-label', next ? 'Remove from watchlist' : 'Add to watchlist');
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 function showCarDetails(car) {
@@ -1520,7 +1779,7 @@ function showCarDetails(car) {
     const econKnown = isPriceKnown(car);
     const resaleDisplay = econKnown ? `$${Number(car.resale_value).toLocaleString()}` : '—';
     const repairDisplay = econKnown ? `$${Number(car.repair_cost).toLocaleString()}` : '—';
-    const metricsSection = econKnown
+    const metricsSection = shouldShowEconomics(car)
         ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
                     <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EST. NET PROFIT</div>
@@ -1531,9 +1790,7 @@ function showCarDetails(car) {
                     <div style="font-size:24px;font-weight:700;color:${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">${escapeHtml(formatRoiDisplay(car))}</div>
                 </div>
             </div>`
-        : `<div style="background:var(--bg-page);padding:12px;border-radius:8px;">
-                <div style="color:var(--text-muted);font-size:13px;line-height:1.4;">Unable to determine ROI and net profit</div>
-            </div>`;
+        : '';
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:16px;">
@@ -1573,6 +1830,21 @@ function showCarDetails(car) {
             }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (data.deleted) {
+                carData = carData.filter((c) => c.id !== car.id);
+                currentResults = carData;
+                listTotal = Math.max(0, listTotal - 1);
+                updateUI(currentResults);
+                updateResultsHintAndLoadMore();
+                saveInventorySession();
+                hideModal();
+                showEbayToast(
+                    data.message ||
+                        'This listing is no longer available on eBay and was removed from your inventory.',
+                    { variant: 'warn' }
+                );
+                return;
+            }
             const updated = data.item;
             if (!updated) throw new Error('missing item');
             const idx = carData.findIndex((c) => c.id === car.id);
@@ -1580,9 +1852,12 @@ function showCarDetails(car) {
             currentResults = carData;
             updateUI(currentResults);
             showCarDetails(updated);
+            saveInventorySession();
         } catch (err) {
             console.error(err);
-            window.alert('Failed to refresh this listing from eBay. Please try again.');
+            showEbayToast('Failed to refresh this listing from eBay. Please try again.', {
+                variant: 'error',
+            });
             btn.disabled = false;
             btn.textContent = 'Refresh from eBay';
         }
@@ -1620,7 +1895,7 @@ function showCarDetails(car) {
             updateResultsHintAndLoadMore();
         } catch (err) {
             console.error(err);
-            window.alert('Failed to delete this listing. Please try again.');
+            showEbayToast('Failed to delete this listing. Please try again.', { variant: 'error' });
             btn.disabled = false;
             btn.textContent = 'Delete from database';
         }
@@ -1778,12 +2053,34 @@ function initEventListeners() {
         if (lab) lab.textContent = e.target.value;
     });
 
+    document.querySelector('a.app-account-menu-item[href="settings.html"]')?.addEventListener('click', () => {
+        saveInventorySession();
+    });
+
+    window.addEventListener('pagehide', () => {
+        saveInventorySession();
+    });
+}
+
+function reapplySavedFilterSnapshot() {
+    try {
+        const raw = sessionStorage.getItem(INVENTORY_SESSION_KEY);
+        if (!raw) return;
+        const payload = JSON.parse(raw);
+        if (payload?.filters) applyFilterSnapshot(payload.filters);
+    } catch (_) {
+        /* ignore */
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
     initAppShell();
     const me = await requireAuth();
     if (!me) return;
+
+    setNotificationsBadge(me.notifications_unread_count);
+    await fetchWatchlistIds();
+    void runWatchCheckIfDue();
 
     initViewMode();
     initSortOrderUi();
@@ -1794,17 +2091,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     wireDualRange('year', document.getElementById('filterYearMin'), document.getElementById('filterYearMax'));
     wireDualRange('mileage', document.getElementById('filterMileageMin'), document.getElementById('filterMileageMax'));
 
-    const meta = await fetchMeta();
-    if (meta) populateMetaIntoUi(meta);
+    const restored = restoreInventorySession();
+
+    let meta = await fetchMeta();
+    if (meta) populateMetaIntoUi(meta, !restored);
+    if (restored) reapplySavedFilterSnapshot();
+
+    if (restored) {
+        const metaFresh = await fetchMeta();
+        if (metaFresh) {
+            populateMetaIntoUi(metaFresh, false);
+            reapplySavedFilterSnapshot();
+        }
+        refreshRegionOptions();
+        refreshCityOptions();
+        updateRadiusAvailability();
+        updateLocationTierUi();
+        updateMakeTriggerLabel();
+        return;
+    }
+
     refreshRegionOptions();
     refreshCityOptions();
     updateRadiusAvailability();
     updateLocationTierUi();
 
     await executeSearch({ append: false, syncEbay: true });
-    const metaAfterSync = await fetchMeta();
+    const metaAfterSync = (await fetchMeta()) || meta;
     if (metaAfterSync) {
-        populateMetaIntoUi(metaAfterSync);
+        populateMetaIntoUi(metaAfterSync, false);
         refreshRegionOptions();
         refreshCityOptions();
         updateRadiusAvailability();

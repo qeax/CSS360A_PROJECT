@@ -287,14 +287,16 @@ def test_refresh_car_ebay_success(client, monkeypatch):
         "buyingOptions": ["FIXED_PRICE"],
     }
 
+    from app.integrations.ebay.client import GetItemResult
+
     class _FakeClient:
         def is_configured(self):
             return True
 
         def get_item(self, item_id):
             if item_id == ebay_item["external_listing_id"]:
-                return detail
-            return None
+                return GetItemResult.ok(detail)
+            return GetItemResult.error()
 
     monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
 
@@ -303,3 +305,43 @@ def test_refresh_car_ebay_success(client, monkeypatch):
     body = response.json()
     assert body["item"]["id"] == ebay_item["id"]
     assert body["item"].get("vin") == "TESTVIN123456789"
+
+
+def test_refresh_car_ebay_listing_gone(client, monkeypatch):
+    list_resp = client.get("/cars", params={"limit": 50})
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    ebay_item = next(
+        (
+            i
+            for i in items
+            if (i.get("source") or "").lower() == "ebay" and i.get("external_listing_id")
+        ),
+        None,
+    )
+    if not ebay_item:
+        pytest.skip("no eBay listing in inventory")
+
+    from app.integrations.ebay.client import GetItemResult
+
+    class _FakeClient:
+        def is_configured(self):
+            return True
+
+        def get_item(self, item_id):
+            if item_id == ebay_item["external_listing_id"]:
+                return GetItemResult.not_found(404)
+            return GetItemResult.error()
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+
+    response = client.post(f"/cars/{ebay_item['id']}/ebay-refresh")
+    assert response.status_code == 200
+    body = response.json()
+    assert body.get("deleted") is True
+    assert body.get("id") == ebay_item["id"]
+
+    again = client.get("/cars", params={"limit": 500})
+    assert again.status_code == 200
+    ids = {c["id"] for c in again.json()["items"]}
+    assert ebay_item["id"] not in ids

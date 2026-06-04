@@ -101,6 +101,43 @@ def extract_fuel_highway_from_aspects_json(aspects_json: Any) -> Optional[str]:
     return extract_aspect_value(aspects_json, ("fuel highway",))
 
 
+def _aspect_display_name(entry: dict[str, Any]) -> Optional[str]:
+    raw_name = (
+        entry.get("localizedAspectName")
+        or entry.get("name")
+        or entry.get("aspectName")
+        or entry.get("localizedLabel")
+    )
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        return None
+    return raw_name.strip()
+
+
+def _aspect_display_value(entry: dict[str, Any]) -> Optional[str]:
+    vals = entry.get("localizedAspectValues") or entry.get("values") or entry.get("value")
+    if isinstance(vals, str):
+        return vals.strip() or None
+    return _first_value(vals)
+
+
+def aspects_to_display_rows(aspects_json: Any) -> list[dict[str, str]]:
+    """Sorted name/value rows for listing detail UI."""
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in _aspect_entries(aspects_json):
+        name = _aspect_display_name(entry)
+        value = _aspect_display_value(entry)
+        if not name or not value:
+            continue
+        key = _normalize_aspect_name(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({"name": name, "value": value})
+    rows.sort(key=lambda r: r["name"].lower())
+    return rows
+
+
 def extended_vehicle_fields_from_aspects_json(aspects_json: Any) -> dict[str, Optional[str]]:
     """All aspect-derived display fields for API/UI."""
     return {

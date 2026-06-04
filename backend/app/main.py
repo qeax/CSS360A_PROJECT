@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.env_bootstrap  # noqa: F401 — loads repo-root .env before route imports
-from app.api.routes import auth, cars, ebay, health
+from app.api.routes import auth, cars, ebay, health, notifications, watchlist
 from app.config import (
     get_auth_session_secret,
     get_cors_origins,
@@ -47,3 +47,7 @@ app.include_router(health.router)
 app.include_router(health.router, prefix="/api")
 app.include_router(ebay.router)
 app.include_router(ebay.router, prefix="/api")
+app.include_router(watchlist.router)
+app.include_router(watchlist.router, prefix="/api")
+app.include_router(notifications.router)
+app.include_router(notifications.router, prefix="/api")

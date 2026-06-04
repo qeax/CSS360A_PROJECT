@@ -22,7 +22,10 @@ from app.models.car import Car
 from app.services.flip import calculate_flip_score, flip_metrics_unknown
 from app.services.geo import haversine_km, latlng_pair
 from app.services.search_query import meaningful_query_tokens, normalize_search_key
-from app.services.vehicle_aspects import extended_vehicle_fields_from_aspects_json
+from app.services.vehicle_aspects import (
+    aspects_to_display_rows,
+    extended_vehicle_fields_from_aspects_json,
+)
 
 _in_memory_demo_cache: list[Any] | None = None
 
@@ -58,6 +61,35 @@ def _listing_mileage_mi(car: Any) -> int | None:
 def _raw_listing_dict(car: Any) -> dict[str, Any] | None:
     raw = getattr(car, "raw_listing_json", None)
     return raw if isinstance(raw, dict) else None
+
+
+def _listing_description_full(car: Any) -> str | None:
+    """Full HTML/text description from DB column or raw eBay payload."""
+    stored = getattr(car, "description_full", None)
+    if isinstance(stored, str) and stored.strip():
+        return stored.strip()
+    raw = _raw_listing_dict(car)
+    if not raw:
+        return None
+    for key in ("description", "Description"):
+        val = raw.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    try:
+        aspects_json = _latest_aspects_json(car)
+        if not aspects_json:
+            aspects_json = raw.get("localizedAspects") or raw.get("aspects_json")
+        from app.services.vehicle_aspects import extract_aspect_value
+
+        aspect_desc = extract_aspect_value(
+            aspects_json,
+            ("description", "item description", "seller's item description"),
+        )
+        if aspect_desc:
+            return aspect_desc
+    except Exception:
+        pass
+    return None
 
 
 def _listing_title(car: Any) -> str:
@@ -249,39 +281,150 @@ def load_car_by_id(db: Session, car_id: int) -> Car | None:
 
 def car_to_api_item(car: Car) -> dict[str, Any] | None:
     """Serialize a single loaded Car to the same dict shape as GET /cars items."""
-    rows = apply_filters(
-        [car],
-        make=None,
-        makes=None,
-        model=None,
-        min_year=None,
-        max_year=None,
-        min_mileage=None,
-        max_mileage=None,
-        condition=None,
-        conditions=None,
-        max_price=None,
-        min_price=None,
-        min_profit=None,
-        min_roi=None,
-        q=None,
-        countries=None,
-        regions=None,
-        cities=None,
-        radius_km=None,
-        radius_mi=None,
-        anchor_lat=None,
-        anchor_lng=None,
-        listing_formats=None,
-        body_styles=None,
-        delivery_modes=None,
-        vehicle_titles=None,
-        exclude_negative_roi=False,
-        exclude_negative_profit=False,
-        exclude_ended_auctions=False,
-        exclude_unknown_price=False,
+    return _build_car_api_dict(car)
+
+
+def _build_car_api_dict(car: Car) -> dict[str, Any]:
+    """Build inventory API dict for one car (no filter exclusions)."""
+    ended = auction_has_ended(car)
+    disp_brand, disp_model, disp_year, disp_mileage = _vehicle_display_fields(car)
+    mi = disp_mileage
+    price_known = bool(getattr(car, "price_known", True))
+    if price_known:
+        analysis = calculate_flip_score(
+            car.price, car.resale_value, car.repair_cost or 0, price_known=True
+        )
+    else:
+        analysis = flip_metrics_unknown()
+    aspect_fields = _aspect_fields_for_car(car)
+    body_style = aspect_fields.get("body_style")
+    vt = (getattr(car, "vehicle_title", None) or "").strip()
+    loc = car.location
+    listing_terms = car.listing_terms
+    delivery = None
+    if listing_terms is not None:
+        delivery = {
+            "ship_to_home": listing_terms.ship_to_home,
+            "local_pickup": listing_terms.local_pickup,
+            "in_store_pickup": listing_terms.in_store_pickup,
+        }
+    location_out = None
+    if loc is not None:
+        location_out = {
+            "country": loc.country,
+            "region": loc.region,
+            "city": loc.city,
+            "postal_code_masked": loc.postal_code_masked,
+        }
+    seller_username = None
+    es = car.external_seller
+    if es is not None:
+        seller_username = es.username
+    listing_ends_at = _listing_ends_at_iso(car.listing_ends_at)
+    image_urls = _image_urls_for_car(car)
+    src = (car.source or "manual").strip().lower()
+    ebay_sandbox = get_ebay_client().sandbox if src == "ebay" else False
+    listing_url_out = resolve_listing_url(
+        getattr(car, "external_listing_id", None),
+        getattr(car, "listing_url", None),
+        sandbox=ebay_sandbox,
     )
-    return rows[0] if rows else None
+    return {
+        "id": car.id,
+        "brand": disp_brand,
+        "model": disp_model,
+        "year": disp_year,
+        "price": car.price,
+        "price_known": price_known,
+        "repair_cost": car.repair_cost,
+        "resale_value": car.resale_value,
+        "mileage": mi,
+        "condition": car.condition,
+        "vehicle_title": vt or None,
+        "image_url": image_urls[0] if image_urls else car.image_url,
+        "images": image_urls,
+        "body_style": body_style,
+        "drive_type": aspect_fields.get("drive_type"),
+        "vin": aspect_fields.get("vin"),
+        "transmission": aspect_fields.get("transmission"),
+        "trim": aspect_fields.get("trim"),
+        "engine": aspect_fields.get("engine"),
+        "fuel_type": aspect_fields.get("fuel_type"),
+        "fuel_city": aspect_fields.get("fuel_city"),
+        "fuel_highway": aspect_fields.get("fuel_highway"),
+        "source": car.source or "manual",
+        "external_listing_id": car.external_listing_id,
+        "listing_url": listing_url_out,
+        "listing_ends_at": listing_ends_at,
+        "auction_ended": ended,
+        "bid_count": car.bid_count,
+        "listing_format": _normalize_listing_format(car.listing_format) or car.listing_format,
+        "description_summary": getattr(car, "description_summary", None),
+        "seller_username": seller_username,
+        "location": location_out,
+        "delivery": delivery,
+        **analysis,
+    }
+
+
+def car_to_detail_api_item(
+    db: Session,
+    car: Car,
+    *,
+    user_id: int | None = None,
+    geocode: bool = True,
+) -> dict[str, Any] | None:
+    """Extended car payload for the detail page."""
+    from app.services.geocode import ensure_car_location_coords
+    from app.services.html_sanitize import sanitize_listing_html
+    from app.services.watchlist import is_car_watched
+
+    item = car_to_api_item(car)
+    if item is None:
+        return None
+    item["description_html"] = sanitize_listing_html(_listing_description_full(car))
+    item["description_summary"] = getattr(car, "description_summary", None) or item.get(
+        "description_summary"
+    )
+    try:
+        aspects_json = _latest_aspects_json(car)
+        if not aspects_json:
+            raw = _raw_listing_dict(car)
+            if raw:
+                aspects_json = raw.get("localizedAspects") or raw.get("aspects_json")
+        item["listing_aspects"] = aspects_to_display_rows(aspects_json)
+    except Exception:
+        item["listing_aspects"] = []
+    item["is_watched"] = is_car_watched(db, user_id, int(car.id)) if user_id else False
+    if car.location is not None:
+        if geocode:
+            try:
+                item["location"] = ensure_car_location_coords(db, int(car.id), car.location)
+            except Exception:
+                loc = car.location
+                item["location"] = {
+                    "country": loc.country,
+                    "region": loc.region,
+                    "city": loc.city,
+                    "postal_code_masked": loc.postal_code_masked,
+                    "latitude": float(loc.latitude) if loc.latitude is not None else None,
+                    "longitude": float(loc.longitude) if loc.longitude is not None else None,
+                }
+        else:
+            loc = car.location
+            item["location"] = {
+                **(item.get("location") or {}),
+                "country": loc.country,
+                "region": loc.region,
+                "city": loc.city,
+                "postal_code_masked": loc.postal_code_masked,
+                "latitude": float(loc.latitude) if loc.latitude is not None else None,
+                "longitude": float(loc.longitude) if loc.longitude is not None else None,
+            }
+            boundary = getattr(loc, "boundary_geojson", None)
+            if boundary:
+                item["location"]["boundary_geojson"] = boundary
+    return item
 
 
 def load_inventory_for_request(db: Session, *, search_key: str | None = None) -> list:
@@ -610,6 +753,7 @@ def apply_filters(
     exclude_negative_profit: bool = False,
     exclude_ended_auctions: bool = True,
     exclude_unknown_price: bool = False,
+    skip_listing_activity_filter: bool = False,
 ) -> list:
     search_key = normalize_search_key(q)
     q_toks = meaningful_query_tokens(q)
@@ -635,15 +779,16 @@ def apply_filters(
     results: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
     for car in cars:
-        active_by_date = _listing_is_active(car, now=now)
         ended = auction_has_ended(car, now=now)
-        if not active_by_date:
-            if is_auction_listing(car) and ended and not exclude_ended_auctions:
-                pass
-            else:
+        if not skip_listing_activity_filter:
+            active_by_date = _listing_is_active(car, now=now)
+            if not active_by_date:
+                if is_auction_listing(car) and ended and not exclude_ended_auctions:
+                    pass
+                else:
+                    continue
+            if exclude_ended_auctions and ended:
                 continue
-        if exclude_ended_auctions and ended:
-            continue
         disp_brand, disp_model, disp_year, disp_mileage = _vehicle_display_fields(car)
         if makes_l:
             if disp_brand.strip().lower() not in makes_l:
@@ -771,33 +916,7 @@ def apply_filters(
             if analysis.get("roi") is None or analysis["roi"] < min_roi:
                 continue
 
-        mileage = mi
         drive_type = aspect_fields.get("drive_type")
-
-        listing_terms = car.listing_terms
-        delivery = None
-        if listing_terms is not None:
-            delivery = {
-                "ship_to_home": listing_terms.ship_to_home,
-                "local_pickup": listing_terms.local_pickup,
-                "in_store_pickup": listing_terms.in_store_pickup,
-            }
-
-        location_out = None
-        if loc is not None:
-            location_out = {
-                "country": loc.country,
-                "region": loc.region,
-                "city": loc.city,
-                "postal_code_masked": loc.postal_code_masked,
-            }
-
-        seller_username = None
-        es = car.external_seller
-        if es is not None:
-            seller_username = es.username
-
-        listing_ends_at = _listing_ends_at_iso(car.listing_ends_at)
 
         city_s = (loc.city or "") if loc else ""
         region_s = (loc.region or "") if loc else ""
@@ -831,53 +950,7 @@ def apply_filters(
                 if ingest_key and ingest_key != search_key:
                     continue
 
-        image_urls = _image_urls_for_car(car)
-        src = (car.source or "manual").strip().lower()
-        ebay_sandbox = get_ebay_client().sandbox if src == "ebay" else False
-        listing_url_out = resolve_listing_url(
-            getattr(car, "external_listing_id", None),
-            getattr(car, "listing_url", None),
-            sandbox=ebay_sandbox,
-        )
-        results.append(
-            {
-                "id": car.id,
-                "brand": disp_brand,
-                "model": disp_model,
-                "year": disp_year,
-                "price": car.price,
-                "price_known": price_known,
-                "repair_cost": car.repair_cost,
-                "resale_value": car.resale_value,
-                "mileage": mileage,
-                "condition": car.condition,
-                "vehicle_title": vt or None,
-                "image_url": image_urls[0] if image_urls else car.image_url,
-                "images": image_urls,
-                "body_style": body_style,
-                "drive_type": drive_type,
-                "vin": aspect_fields.get("vin"),
-                "transmission": aspect_fields.get("transmission"),
-                "trim": aspect_fields.get("trim"),
-                "engine": aspect_fields.get("engine"),
-                "fuel_type": aspect_fields.get("fuel_type"),
-                "fuel_city": aspect_fields.get("fuel_city"),
-                "fuel_highway": aspect_fields.get("fuel_highway"),
-                "source": car.source or "manual",
-                "external_listing_id": car.external_listing_id,
-                "listing_url": listing_url_out,
-                "listing_ends_at": listing_ends_at,
-                "auction_ended": ended,
-                "bid_count": car.bid_count,
-                "listing_format": _normalize_listing_format(car.listing_format)
-                or car.listing_format,
-                "description_summary": getattr(car, "description_summary", None),
-                "seller_username": seller_username,
-                "location": location_out,
-                "delivery": delivery,
-                **analysis,
-            }
-        )
+        results.append(_build_car_api_dict(car))
     return results
 
 

@@ -25,9 +25,20 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    watch_last_full_check_at = Column(DateTime(timezone=True), nullable=True)
 
     audit_events = relationship(
         "UserAuditEvent",
         back_populates="user",
         passive_deletes=True,
+    )
+    watchlist_items = relationship(
+        "UserWatchlistItem",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notifications = relationship(
+        "UserNotification",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

@@ -448,6 +448,7 @@ def parse_get_item(item: dict[str, Any]) -> dict[str, Any]:
         "bid_count": item.get("bidCount"),
         "listing_ends_at": _parse_listing_end(item.get("itemEndDate")),
         "description_summary": _first_str(item.get("shortDescription")) or title[:512],
+        "description_full": _first_str(item.get("description")),
         "aspects_json": aspects_raw,
         "source": "ebay",
     }

@@ -15,6 +15,7 @@ class CarLocation(Base):
     postal_code_masked = Column(String(32), nullable=True)
     latitude = Column(Numeric(10, 7), nullable=True)
     longitude = Column(Numeric(10, 7), nullable=True)
+    boundary_geojson = Column(JSON, nullable=True)
 
     car = relationship("Car", back_populates="location")
 

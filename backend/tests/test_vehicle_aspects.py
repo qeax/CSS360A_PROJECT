@@ -2,6 +2,7 @@
 
 from app.integrations.ebay.parse_item import resolve_listing_mileage
 from app.services.vehicle_aspects import (
+    aspects_to_display_rows,
     extended_vehicle_fields_from_aspects_json,
     extract_vin_from_aspects_json,
 )
@@ -22,6 +23,14 @@ MCLAREN_ASPECTS = [
     {"type": "STRING", "name": "Trim", "value": "LAUNCH EDITION!! Glacier White paint"},
     {"type": "STRING", "name": "Vehicle Title", "value": "Clean"},
 ]
+
+
+def test_aspects_to_display_rows_sorted_and_deduped():
+    rows = aspects_to_display_rows(MCLAREN_ASPECTS)
+    names = [r["name"] for r in rows]
+    assert names == sorted(names, key=str.lower)
+    assert any(r["name"] == "VIN (Vehicle Identification Number)" for r in rows)
+    assert len(rows) == len(MCLAREN_ASPECTS)
 
 
 def test_extract_vin_from_aspects():

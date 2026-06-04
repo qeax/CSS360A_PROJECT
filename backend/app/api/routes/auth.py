@@ -189,7 +189,7 @@ def auth_me(request: Request, db: Session = Depends(get_db)):
         user = ensure_dev_bypass_user(db)
         request.session["user_id"] = user.id
         request.session["email"] = user.email
-        payload = user_profile_payload(user)
+        payload = user_profile_payload(user, db)
         payload["dev_bypass"] = True
         return payload
 
@@ -200,4 +200,4 @@ def auth_me(request: Request, db: Session = Depends(get_db)):
     if user is None:
         request.session.clear()
         raise HTTPException(status_code=401, detail="not_authenticated")
-    return user_profile_payload(user)
+    return user_profile_payload(user, db)

@@ -1,0 +1,191 @@
+/* Notifications bell + dropdown */
+.app-notifications-wrap {
+    position: relative;
+    isolation: isolate;
+}
+
+.app-notifications-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.app-notifications-badge[hidden] {
+    display: none !important;
+}
+
+.app-notifications-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+    max-height: 420px;
+    overflow: auto;
+    background-color: var(--ui-bg);
+    color: var(--text-main);
+    opacity: 1;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    z-index: 200;
+    padding: 0.5rem 0;
+}
+
+#notificationsList {
+    background-color: var(--ui-bg);
+}
+
+.app-notifications-panel[hidden] {
+    display: none !important;
+}
+
+.app-notifications-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    background-color: var(--ui-bg);
+}
+
+.app-notifications-read-all {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--topbar-accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.app-notification-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.65rem 1rem;
+    border: none;
+    background: var(--ui-bg);
+    color: var(--text-main);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.app-notification-item:hover {
+    background: var(--bg-elevated);
+}
+
+.app-notification-item.is-unread {
+    background: color-mix(in srgb, var(--topbar-accent) 10%, var(--ui-bg));
+}
+
+.app-notification-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    margin-bottom: 0.2rem;
+}
+
+.app-notification-message {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.app-notification-time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.app-notifications-empty,
+.app-notifications-loading {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    background-color: var(--ui-bg);
+}
+
+/* Watch heart on cards and car detail */
+.car-card-watch-btn {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.car-card-title-row .car-card-watch-btn,
+.car-detail-title-row .car-card-watch-btn {
+    flex-shrink: 0;
+    margin-left: auto;
+    align-self: flex-start;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--ui-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.car-card-title-row .car-card-watch-btn:hover,
+.car-detail-title-row .car-card-watch-btn:hover {
+    border-color: var(--accent-green);
+    color: #f87171;
+    transform: scale(1.05);
+}
+
+.car-card-title-row .car-card-watch-btn.is-watched,
+.car-detail-title-row .car-card-watch-btn.is-watched {
+    color: #f87171;
+    border-color: color-mix(in srgb, #f87171 45%, var(--border-color));
+}
+
+.car-card-title-row .car-card-watch-btn.is-watched .car-card-watch-icon path,
+.car-detail-title-row .car-card-watch-btn.is-watched .car-card-watch-icon path {
+    fill: currentColor;
+}
+
+.profile-watch-section {
+    margin-top: 2rem;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 1.5rem 3rem;
+}
+
+.profile-watch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.profile-watch-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.profile-watch-grid .inventory-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}

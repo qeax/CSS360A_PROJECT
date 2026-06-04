@@ -8,13 +8,36 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+GetItemStatus = Literal["ok", "not_found", "error"]
+
+
+@dataclass(frozen=True)
+class GetItemResult:
+    status: GetItemStatus
+    detail: dict[str, Any] | None = None
+    http_status: int | None = None
+
+    @classmethod
+    def ok(cls, detail: dict[str, Any]) -> "GetItemResult":
+        return cls(status="ok", detail=detail)
+
+    @classmethod
+    def not_found(cls, http_status: int = 404) -> "GetItemResult":
+        return cls(status="not_found", http_status=http_status)
+
+    @classmethod
+    def error(cls, http_status: int | None = None) -> "GetItemResult":
+        return cls(status="error", http_status=http_status)
+
 
 _client: "EbayListingClient | None" = None
 
@@ -68,9 +91,25 @@ def _ebay_search_pages() -> int:
         return 2
 
 
+def ebay_batch_size() -> int:
+    """Max search summaries stored per eBay batch (before getItem waves)."""
+    try:
+        return max(1, min(int(os.getenv("EBAY_BATCH_SIZE", "150")), 200))
+    except ValueError:
+        return 150
+
+
+def ebay_wave_size() -> int:
+    """How many listings to enrich via getItem per wave."""
+    try:
+        return max(1, min(int(os.getenv("EBAY_WAVE_SIZE", "50")), 50))
+    except ValueError:
+        return 50
+
+
 def ebay_fetch_cap() -> int:
-    """Max distinct listings to pull per inventory refresh."""
-    return _ebay_search_limit() * _ebay_search_pages()
+    """Max distinct listings to pull per inventory refresh (batch size)."""
+    return ebay_batch_size()
 
 
 def _search_filter_param(max_price: Optional[int] = None) -> str:
@@ -302,13 +341,13 @@ class EbayListingClient:
         """Search eBay for listings and return normalized results (empty list on failure)."""
         return self._collect_search_rows(query, max_price=max_price, limit=limit)
 
-    def get_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+    def get_item(self, item_id: str) -> GetItemResult:
         """Fetch full listing details (localizedAspects, delivery, seller, etc.)."""
         if not self.is_configured() or not item_id:
-            return None
+            return GetItemResult.error()
         token = self._get_access_token()
         if not token:
-            return None
+            return GetItemResult.error()
         try:
             encoded_id = quote(item_id, safe="")
             url = f"{self.base_url}/buy/browse/v1/item/{encoded_id}"
@@ -316,27 +355,42 @@ class EbayListingClient:
                 "Authorization": f"Bearer {token}",
                 "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             }
-            params = {"fieldgroups": "PRODUCT"}
             response = None
             for attempt in range(3):
-                response = requests.get(url, headers=headers, params=params, timeout=6)
+                response = requests.get(url, headers=headers, timeout=6)
                 if response.status_code == 429 and attempt < 2:
                     time.sleep(0.5 * (2**attempt))
                     continue
                 break
             assert response is not None
-            response.raise_for_status()
-            return response.json()
+            if response.status_code in (404, 410):
+                logger.info(
+                    "eBay getItem HTTP %s for %s (listing gone)",
+                    response.status_code,
+                    item_id,
+                )
+                return GetItemResult.not_found(response.status_code)
+            if not response.ok:
+                logger.info(
+                    "eBay getItem HTTP %s for %s",
+                    response.status_code,
+                    item_id,
+                )
+                return GetItemResult.error(response.status_code)
+            return GetItemResult.ok(response.json())
         except requests.HTTPError as e:
+            status = getattr(e.response, "status_code", None)
             logger.info(
                 "eBay getItem HTTP %s for %s",
-                getattr(e.response, "status_code", "?"),
+                status if status is not None else "?",
                 item_id,
             )
-            return None
+            if status in (404, 410):
+                return GetItemResult.not_found(status)
+            return GetItemResult.error(status)
         except Exception as e:
             logger.info("eBay getItem failed for %s: %s", item_id, e)
-            return None
+            return GetItemResult.error()
 
     def search_listings_enriched(
         self, query: str, max_price: Optional[int] = None, limit: int = 5
@@ -359,7 +413,10 @@ class EbayListingClient:
 
         def _enrich(row: Dict[str, Any]) -> Dict[str, Any]:
             item_id = row.get("external_listing_id")
-            detail = self.get_item(item_id) if item_id else None
+            if not item_id:
+                return merge_search_summary(row, None)
+            result = self.get_item(item_id)
+            detail = result.detail if result.status == "ok" else None
             return merge_search_summary(row, detail)
 
         enriched: List[Dict[str, Any]] = []
@@ -373,3 +430,46 @@ class EbayListingClient:
                     logger.warning("eBay enrich row failed: %s", e)
         enriched.extend(tail)
         return enriched
+
+    def enrich_summaries(
+        self, summaries: list[dict[str, Any]], *, max_items: int | None = None
+    ) -> list[dict[str, Any] | None]:
+        """
+        Run getItem for each summary row; return merged dicts (None when getItem fails).
+        Order matches input slice.
+        """
+        from app.integrations.ebay.parse_item import merge_search_summary
+
+        if not summaries:
+            return []
+        slice_rows = summaries[:max_items] if max_items is not None else summaries
+
+        def _one(row: dict[str, Any]) -> dict[str, Any] | None:
+            item_id = row.get("external_listing_id")
+            if not item_id:
+                return None
+            result = self.get_item(item_id)
+            if result.status != "ok" or not result.detail:
+                return None
+            detail = result.detail
+            merged = merge_search_summary(row, detail)
+            merged["raw_listing_json"] = detail
+            if detail.get("sellerItemRevision"):
+                merged["seller_item_revision"] = detail.get("sellerItemRevision")
+            return merged
+
+        if len(slice_rows) == 1:
+            return [_one(slice_rows[0])]
+
+        out: list[dict[str, Any] | None] = [None] * len(slice_rows)
+        workers = min(5, max(1, len(slice_rows)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_one, row): i for i, row in enumerate(slice_rows)}
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                try:
+                    out[idx] = fut.result()
+                except Exception as e:
+                    logger.warning("eBay enrich row failed: %s", e)
+                    out[idx] = None
+        return out

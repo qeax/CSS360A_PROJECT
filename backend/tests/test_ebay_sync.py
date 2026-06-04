@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
+from app.models import EbaySyncBatch  # noqa: F401 — register table
 from app.models.car import Car
 from app.models.car_satellite import CarLocation, CarMedia
 from app.services.ebay_sync import (
@@ -120,13 +121,21 @@ def test_sync_cooldown(monkeypatch, db):
 
     calls = {"n": 0}
 
-    def fake_fetch(**_kwargs):
+    def fake_search(**_kwargs):
         calls["n"] += 1
         return [_sample_listing("v1|200|0")]
 
     monkeypatch.setattr(
-        "app.services.ebay_sync.fetch_ebay_listings_for_sync",
-        fake_fetch,
+        "app.services.ebay_sync.search_listings_batch",
+        fake_search,
+    )
+
+    def _fake_enrich(self, rows, **kw):
+        return [{**rows[0], "raw_listing_json": {"itemId": "v1|200|0"}}]
+
+    monkeypatch.setattr(
+        "app.integrations.ebay.client.EbayListingClient.enrich_summaries",
+        _fake_enrich,
     )
 
     class _FakeClient:
@@ -150,7 +159,7 @@ def test_sync_fetch_failure_returns_failed_status(monkeypatch, db):
     def boom(**_kwargs):
         raise RuntimeError("network down")
 
-    monkeypatch.setattr("app.services.ebay_sync.fetch_ebay_listings_for_sync", boom)
+    monkeypatch.setattr("app.services.ebay_sync.search_listings_batch", boom)
 
     class _FakeClient:
         def is_configured(self) -> bool:
@@ -167,9 +176,20 @@ def test_sync_fetch_failure_returns_failed_status(monkeypatch, db):
 def test_sync_success_includes_ok_status(monkeypatch, db):
     reset_sync_cooldown_for_tests()
 
+    listing = _sample_listing("v1|300|0")
+    listing["raw_listing_json"] = {"itemId": "v1|300|0"}
+
     monkeypatch.setattr(
-        "app.services.ebay_sync.fetch_ebay_listings_for_sync",
-        lambda **_kwargs: [_sample_listing("v1|300|0")],
+        "app.services.ebay_sync.search_listings_batch",
+        lambda **_kwargs: [listing],
+    )
+
+    def _fake_enrich(self, rows, **kw):
+        return [rows[0] if rows else None]
+
+    monkeypatch.setattr(
+        "app.integrations.ebay.client.EbayListingClient.enrich_summaries",
+        _fake_enrich,
     )
 
     class _FakeClient:

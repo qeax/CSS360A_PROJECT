@@ -358,7 +358,7 @@ article.car-card:focus-within .car-card-carousel-dots {
 
 .car-card-title-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     margin-bottom: 8px;
 }
@@ -479,6 +479,10 @@ article.car-card:focus-within .car-card-carousel-dots {
     margin-top: auto;
     padding-top: 8px;
     padding-bottom: 2px;
+}
+
+.car-card-footer:not(:has(.car-card-metrics-compact)) .car-card-footer-start {
+    flex: 1 1 100%;
 }
 
 .car-card-footer-start {
