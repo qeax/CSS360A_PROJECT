@@ -34,9 +34,8 @@ jobs:
       - name: Ruff format
         run: ruff format --check .
 
-      # PYSEC-2025-183: PyJWT 2.12.1 is latest on PyPI; no fixed release yet (disputed advisory).
       - name: pip-audit (dependency vulnerabilities)
-        run: pip-audit -r requirements.txt -r requirements-dev.txt --ignore-vuln PYSEC-2025-183
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
 
       - name: Bandit (security lint on app/)
         run: bandit -r app -ll
