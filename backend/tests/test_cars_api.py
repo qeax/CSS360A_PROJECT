@@ -71,6 +71,10 @@ def test_cars_meta_returns_bounds(client):
     assert "max_year" in data
     assert "min_mileage" in data
     assert "max_mileage" in data
+    assert "slider_defaults" in data
+    assert data["max_year"] > data["min_year"]
+    assert data["max_price"] > data["min_price"]
+    assert data["max_mileage"] > data["min_mileage"]
     assert "makes" in data
     assert "vehicle_titles" in data
     assert "countries" in data
