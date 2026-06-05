@@ -78,9 +78,9 @@ class EbaySyncCooldownError(Exception):
 
 def _sync_min_interval_sec() -> float:
     try:
-        return max(0.0, float(os.getenv("EBAY_SYNC_MIN_INTERVAL_SEC", "60")))
+        return max(0.0, float(os.getenv("EBAY_SYNC_MIN_INTERVAL_SEC", "10")))
     except ValueError:
-        return 60.0
+        return 10.0
 
 
 def check_sync_cooldown(user_id: int) -> None:

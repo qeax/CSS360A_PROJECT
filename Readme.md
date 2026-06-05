@@ -5,13 +5,14 @@ Web application for analyzing car flips: static frontend, FastAPI API, MariaDB i
 ## Table of contents
 
 1. [Architecture](#architecture)
-2. [Configuration](#configuration)
-3. [Demo catalog and seeds](#demo-catalog-and-seeds)
-4. [Local development](#local-development)
-5. [CI/CD](#cicd)
-6. [Git hooks (pre-commit)](#git-hooks-pre-commit)
-7. [Repository guidelines](#repository-guidelines)
-8. [Reference: backend layout and API](#reference-backend-layout-and-api)
+2. [Resale pricing model](#resale-pricing-model)
+3. [Configuration](#configuration)
+4. [Demo catalog and seeds](#demo-catalog-and-seeds)
+5. [Local development](#local-development)
+6. [CI/CD](#cicd)
+7. [Git hooks (pre-commit)](#git-hooks-pre-commit)
+8. [Repository guidelines](#repository-guidelines)
+9. [Reference: backend layout and API](#reference-backend-layout-and-api)
 
 ---
 
@@ -89,7 +90,8 @@ Implementation: [backend/app/api/routes/auth.py](backend/app/api/routes/auth.py)
 | [backend/app/db.py](backend/app/db.py) | SQLAlchemy engine and sessions |
 | [backend/app/api/routes/](backend/app/api/routes/) | HTTP: `/cars`, `/health`, `/auth/*` |
 | [backend/app/repositories/](backend/app/repositories/) | Database queries |
-| [backend/app/services/](backend/app/services/) | ROI, geo, body style, OIDC |
+| [backend/app/services/](backend/app/services/) | ROI, resale pricing, geo, body style, OIDC |
+| [backend/app/services/pricing/](backend/app/services/pricing/) | Cascading ARV estimator (comps → segment → heuristic) |
 | [backend/app/integrations/ebay/](backend/app/integrations/ebay/) | eBay Browse API ingest |
 | [backend/app/services/ebay_sync.py](backend/app/services/ebay_sync.py) | Upsert eBay listings into MySQL (`sync_ebay=1` on `/cars`) |
 
@@ -105,6 +107,87 @@ Static assets under [frontend/](frontend/):
 | [frontend/icons/](frontend/icons/) | SVG icons (MIT, Heroicons) |
 
 Nginx maps `/index.html` → `/pages/index.html` so public URLs stay unchanged.
+
+---
+
+## Resale pricing model
+
+The app estimates **after-repair value (ARV)** — expected resale price after reconditioning — separately from **repair cost**. **ROI** and **net profit** are computed at read time from purchase price, `resale_value`, and `repair_cost` ([backend/app/services/flip.py](backend/app/services/flip.py)).
+
+Resale ARV is produced by a **cascading hybrid estimator** in [backend/app/services/pricing/](backend/app/services/pricing/). Results are stored on each `cars` row (`resale_value`, `resale_method`, `resale_confidence`, `resale_comp_count`, `resale_segment_key`, `resale_estimated_at`) and refreshed on eBay upsert, on `GET /api/cars` (page slice, DB-only), and via `POST /api/cars/{id}/resale-refresh`.
+
+### Cascade order
+
+`ResalePricingService` tries providers in this order:
+
+1. **Internal comps** — similar listings already in our MySQL inventory  
+2. **Segment baseline** — median price for `brand|model|year` from `vehicle_price_segments`  
+3. **Heuristic** — rule-based economics from listing attributes (legacy flip model)  
+4. **External APIs** — stub for future third-party pricing (`ExternalPricingProvider` returns `None` today)
+
+The first provider that meets its **acceptance threshold** wins. If none qualify, the service returns the best **fallback** estimate (usually heuristic).
+
+Default thresholds ([backend/app/services/pricing/service.py](backend/app/services/pricing/service.py)):
+
+| Provider | Accept when |
+|----------|-------------|
+| Comps | `method` starts with `comps` **and** `confidence ≥ 0.45` |
+| Segment | `method == segment` **and** `confidence ≥ 0.35` |
+| Heuristic | Used as final fallback |
+
+### Level 1: Internal comps
+
+[InternalCompsProvider](backend/app/services/pricing/providers.py) searches up to 20 comparable cars in the DB ([comparable_finder.py](backend/app/services/pricing/comparable_finder.py)), scoring similarity from make/model, year, mileage, condition, title, region, and recency.
+
+- Returns **`None`** if fewer than **2** comps are found, or if a weighted trimmed median cannot be computed.
+- Otherwise builds ARV from the median comp price plus adjustments (mileage delta, condition, title, trim/engine mismatch, listing-format haircut, fees).
+- Method label: `comps_tight` (≥ 5 high-similarity comps) or `comps_shrunk` (broader comp set).
+- Confidence blends comp count, average similarity, and recency (typically **0.45–0.9** when comps are usable).
+
+If comps exist but **confidence &lt; 0.45**, the estimate is **not** accepted; the cascade continues to segment.
+
+### Level 2: Segment baseline
+
+[SegmentBaselineProvider](backend/app/services/pricing/providers.py) reads pre-aggregated rows in `vehicle_price_segments` (rebuilt periodically from inventory — see `_maybe_refresh_segment_baselines` in [ebay_sync.py](backend/app/services/ebay_sync.py)).
+
+- Returns **`None`** if no segment exists for the listing’s brand/model/year (including adjacent year buckets), or if the segment has **&lt; 2** priced samples.
+- ARV = segment median plus the same style of mileage/condition/title/format adjustments.
+- Segment confidence is derived from sample count and is **always ≥ 0.35** when a segment row is returned, so any valid segment normally passes the segment threshold.
+
+Typical case: comps are weak (wrong region/year) but several same-model cars exist in inventory → **segment** wins instead of heuristic.
+
+### Level 3: Heuristic fallback
+
+[HeuristicProvider](backend/app/services/pricing/providers.py) calls `estimate_flip_economics` — year, mileage, condition, vehicle title, listing format, and purchase price. Fixed **confidence = 0.28** (UI: **Low**).
+
+Heuristic is chosen when:
+
+- **No comps path:** fewer than 2 similar listings in the DB, or comps confidence below 0.45 **and** no qualifying segment.
+- **No segment path:** exotic or sparse brand/model/year (e.g. only one car in that bucket), or segments not rebuilt yet.
+- **Weak comps discarded:** if segment is unavailable, a low-confidence comp estimate is **not** kept — `HeuristicProvider` overwrites the fallback at the end of the loop.
+
+Comparable prices in comps/segment reflect **eBay asking prices** in our database, not verified sold prices.
+
+### Repair cost
+
+Repair is still estimated by [estimate_flip_from_listing](backend/app/services/flip.py) at ingest time (independent of the ARV cascade). ROI uses both numbers together.
+
+### Confidence in the UI
+
+Stored `resale_confidence` (0–1) is mapped to labels in [frontend/js/listing-shared.js](frontend/js/listing-shared.js):
+
+| UI label | `resale_confidence` |
+|----------|---------------------|
+| **High** | ≥ 0.75 |
+| **Medium** | ≥ 0.45 |
+| **Low** | &lt; 0.45 |
+
+Inventory cards show method and confidence under ROI; the car detail page explains the source (comps / segment / heuristic) and shows a confidence pill with a hover tooltip.
+
+### Maintenance
+
+- **Backfill existing rows:** `docker compose exec backend python scripts/backfill_resale_estimates.py` (or run the same path from `backend/` with env loaded).
+- **Tests:** [backend/tests/test_resale_pricing.py](backend/tests/test_resale_pricing.py).
 
 ---
 
@@ -135,7 +218,7 @@ Secrets are **never committed**. For a local machine, copy [.env.example](.env.e
 | `EBAY_CATEGORY_IDS` | eBay category filter (default `6001` = Cars & Trucks) |
 | `EBAY_SEARCH_LIMIT` | Max search hits per Browse page (default `50`) |
 | `EBAY_GET_ITEM_MAX` | How many hits to enrich via `getItem` (default `12`; `0` = search only) |
-| `EBAY_SYNC_MIN_INTERVAL_SEC` | Per-user cooldown between `sync_ebay=1` calls (default `60`) |
+| `EBAY_SYNC_MIN_INTERVAL_SEC` | Per-user cooldown between `sync_ebay=1` calls (default `10`; `0` disables) |
 
 Clear all inventory in MySQL (cars + external sellers):
 

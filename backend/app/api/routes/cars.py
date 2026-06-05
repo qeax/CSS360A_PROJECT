@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -28,9 +29,11 @@ from app.services.ebay_sync import (
     refresh_car_from_ebay,
     start_ebay_batch,
 )
+from app.services.pricing import refresh_car_resale_estimate, refresh_resale_api_items
 from app.services.search_query import normalize_search_key
 
 router = APIRouter(tags=["cars"])
+logger = logging.getLogger(__name__)
 
 _DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 50
@@ -145,6 +148,32 @@ def refresh_car_ebay(
     if car is None:
         raise HTTPException(status_code=404, detail="car_not_found")
     try:
+        item = car_to_detail_api_item(db, car, user_id=int(current_user.id), geocode=False)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+    if item is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    return {"item": item}
+
+
+@router.post("/cars/{car_id}/resale-refresh")
+def refresh_car_resale(
+    car_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.repositories.cars import car_to_detail_api_item
+
+    car = load_car_by_id(db, car_id)
+    if car is None:
+        raise HTTPException(status_code=404, detail="car_not_found")
+    try:
+        refresh_car_resale_estimate(db, car)
+        db.commit()
         item = car_to_detail_api_item(db, car, user_id=int(current_user.id), geocode=False)
     except SQLAlchemyError as e:
         db.rollback()
@@ -329,6 +358,17 @@ def get_cars(
     sort_car_dicts_inplace(results, effective_sort, sort_order)
     total = len(results)
     page = results[offset : offset + limit]
+    try:
+        page = refresh_resale_api_items(db, page)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
+    except Exception as e:
+        db.rollback()
+        logger.warning("resale refresh for page failed: %s", e)
     data_mode = _resolve_data_mode(sync_ebay or ebay_batch_continue, sync_stats)
     payload: dict = {
         "items": page,

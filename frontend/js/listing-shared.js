@@ -88,13 +88,142 @@
         return calculateHeatmap(roi, 32, 55);
     }
 
-    function metricsBlockHeatStyle(roi, priceKnown = true) {
+    function metricsBlockHeatStyle(roi, priceKnown = true, confidence = null) {
         if (priceKnown === false || roi == null || Number.isNaN(Number(roi))) {
             return 'background: var(--bg-page); border-color: var(--border-color);';
         }
         const heat = calculateHeatmap(roi, 40, 58);
         const border = calculateHeatmapBorder(roi);
-        return `background: color-mix(in srgb, ${heat} 22%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
+        let mixPct = 22;
+        const conf = Number(confidence);
+        if (!Number.isNaN(conf) && conf > 0) {
+            if (conf < 0.45) mixPct = 12;
+            else if (conf < 0.75) mixPct = 17;
+        }
+        return `background: color-mix(in srgb, ${heat} ${mixPct}%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
+    }
+
+    function formatResaleMethodLabel(method) {
+        const key = String(method || '')
+            .trim()
+            .toLowerCase();
+        if (!key) return '';
+        if (key === 'comps_tight' || key === 'comps') return 'Comps';
+        if (key === 'comps_shrunk') return 'Comps (shrunk)';
+        if (key === 'segment') return 'Segment baseline';
+        if (key === 'heuristic') return 'Heuristic';
+        if (key === 'external') return 'External';
+        return key.replace(/_/g, ' ');
+    }
+
+    function formatResaleConfidence(confidence) {
+        const conf = Number(confidence);
+        if (Number.isNaN(conf) || conf <= 0) {
+            return { label: '', tier: '' };
+        }
+        if (conf >= 0.75) return { label: 'High', tier: 'high' };
+        if (conf >= 0.45) return { label: 'Medium', tier: 'medium' };
+        return { label: 'Low', tier: 'low' };
+    }
+
+    function resaleConfidenceTooltip(tier) {
+        if (tier === 'high') {
+            return 'High confidence: several close, recent comparable listings in our inventory support this resale estimate. ROI and profit are relatively trustworthy.';
+        }
+        if (tier === 'medium') {
+            return 'Medium confidence: estimate comes from comparable listings or a segment average, but with fewer matches or looser similarity. Use ROI as a reasonable guide, not a precise target.';
+        }
+        if (tier === 'low') {
+            return 'Low confidence: little or no comparable inventory data; estimate relies mainly on heuristics (year, mileage, condition, asking price). Treat ROI and profit as directional only.';
+        }
+        return '';
+    }
+
+    function resaleEstimateMetaParts(car) {
+        const methodLabel = formatResaleMethodLabel(car.resale_method);
+        const compCount = Number(car.resale_comp_count || 0);
+        const conf = formatResaleConfidence(car.resale_confidence);
+        const parts = [];
+        if (methodLabel) parts.push(methodLabel);
+        if (compCount > 0 && String(car.resale_method || '').toLowerCase().startsWith('comps')) {
+            parts.push(`${compCount} comp${compCount === 1 ? '' : 's'}`);
+        } else if (compCount > 0 && String(car.resale_method || '').toLowerCase() === 'segment') {
+            parts.push(`${compCount} in segment`);
+        }
+        if (conf.label) parts.push(conf.label);
+        return { parts, conf, methodLabel, compCount };
+    }
+
+    function resaleEstimateMetaHtml(car) {
+        const { parts, conf } = resaleEstimateMetaParts(car);
+        if (!parts.length) return '';
+        const text = parts.join(' · ');
+        const dotCls = conf.tier ? ` car-card-metrics-meta-dot--${conf.tier}` : '';
+        return `<span class="car-card-metrics-meta" title="Resale estimate source and confidence">
+            <span class="car-card-metrics-meta-dot${dotCls}" aria-hidden="true"></span>
+            <span class="car-card-metrics-meta-text">${escapeHtml(text)}</span>
+        </span>`;
+    }
+
+    function resaleEstimateDetailHtml(car) {
+        if (!shouldShowEconomics(car)) return '';
+        const methodKey = String(car.resale_method || '')
+            .trim()
+            .toLowerCase();
+        const methodLabel = formatResaleMethodLabel(car.resale_method) || 'Estimate';
+        const { conf, compCount } = resaleEstimateMetaParts(car);
+        const resaleDisplay =
+            car.resale_value != null && !Number.isNaN(Number(car.resale_value))
+                ? formatPriceShort(car.resale_value)
+                : '—';
+        const repairDisplay =
+            car.repair_cost != null && !Number.isNaN(Number(car.repair_cost))
+                ? formatPriceShort(car.repair_cost)
+                : '—';
+
+        let lead = 'Resale estimate uses available inventory data.';
+        if (methodKey === 'comps_tight' || methodKey === 'comps') {
+            lead =
+                compCount > 0
+                    ? `Estimated by ${methodLabel} from ${compCount} similar listing${compCount === 1 ? '' : 's'} in our inventory.`
+                    : `Estimated by ${methodLabel} from similar listings in our inventory.`;
+        } else if (methodKey === 'comps_shrunk') {
+            lead = `Estimated by ${methodLabel} — a blend of similar listings and segment pricing.`;
+        } else if (methodKey === 'segment') {
+            lead =
+                compCount > 0
+                    ? `Estimated from segment baseline (${compCount} listing${compCount === 1 ? '' : 's'} in this make/model/year group).`
+                    : 'Estimated from segment baseline for this make, model, and year.';
+        } else if (methodKey === 'heuristic') {
+            lead = 'Limited comparable data — estimate uses listing age, mileage, condition, and purchase price.';
+        }
+
+        const confTooltip = resaleConfidenceTooltip(conf.tier);
+
+        const confBadge = conf.label
+            ? `<span class="car-detail-economics-confidence car-detail-economics-confidence--${escapeAttr(conf.tier)}" title="${escapeAttr(confTooltip)}" tabindex="0" aria-label="${escapeAttr(`${conf.label} confidence. ${confTooltip}`)}">${escapeHtml(conf.label)} confidence</span>`
+            : '';
+
+        return `<section class="car-detail-economics-note" aria-label="How resale and ROI were estimated">
+            <h2 class="car-detail-economics-note-title">How we estimated resale</h2>
+            <p class="car-detail-economics-note-lead">${escapeHtml(lead)}</p>
+            ${confBadge}
+            <dl class="car-detail-economics-dl">
+                <div class="car-detail-economics-dl-row">
+                    <dt>Resale (est.)</dt>
+                    <dd>${escapeHtml(resaleDisplay)} — expected price after reconditioning</dd>
+                </div>
+                <div class="car-detail-economics-dl-row">
+                    <dt>Repair (est.)</dt>
+                    <dd>${escapeHtml(repairDisplay)} — expected reconditioning cost</dd>
+                </div>
+                <div class="car-detail-economics-dl-row">
+                    <dt>ROI (est.)</dt>
+                    <dd>${escapeHtml(formatRoiDisplay(car))} — return based on purchase, repair, and resale</dd>
+                </div>
+            </dl>
+            <p class="car-detail-economics-note-foot car-detail-economics-note-foot--muted">Comparable prices reflect asking prices from eBay listings, not final sold prices.</p>
+        </section>`;
     }
 
     function profitValueClass(n) {
@@ -108,19 +237,12 @@
         }
         const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
         const profitCls = profitValueClass(car.net_profit);
-        const conf = Number(car.resale_confidence);
-        const hasConf = !Number.isNaN(conf) && conf > 0;
-        const confLabel = !hasConf ? '' : conf >= 0.75 ? 'High' : conf >= 0.45 ? 'Medium' : 'Low';
-        const method = String(car.resale_method || '').trim();
-        const compCount = Number(car.resale_comp_count || 0);
-        const sourceInfo = method
-            ? `${method}${compCount > 0 ? ` · ${compCount} comps` : ''}${confLabel ? ` · ${confLabel}` : ''}`
-            : '';
-        return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true)}">
+        const metaHtml = resaleEstimateMetaHtml(car);
+        return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true, car.resale_confidence)}">
             <div class="car-card-metrics-col car-card-metrics-col--roi">
                 <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
                 <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${escapeHtml(formatRoiDisplay(car))}</span>
-                ${sourceInfo ? `<span class="car-card-metrics-col-label">${escapeHtml(sourceInfo)}</span>` : ''}
+                ${metaHtml}
             </div>
             <span class="car-card-metrics-divider" aria-hidden="true"></span>
             <div class="car-card-metrics-col car-card-metrics-col--profit">
@@ -667,6 +789,10 @@
         calculateHeatmap,
         calculateHeatmapBorder,
         metricsBlockHtml,
+        formatResaleMethodLabel,
+        formatResaleConfidence,
+        resaleEstimateMetaHtml,
+        resaleEstimateDetailHtml,
         priceBlockHtml,
         listingLinkHtml,
         specLines,

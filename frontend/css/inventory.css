@@ -625,7 +625,7 @@ article.car-card:focus-within .car-card-carousel-dots {
 .car-card-metrics-col--roi {
     flex: 0 0 auto;
     width: max-content;
-    max-width: 5.5rem;
+    max-width: 8.5rem;
     padding-right: 2px;
 }
 
@@ -649,6 +649,51 @@ article.car-card:focus-within .car-card-carousel-dots {
     text-transform: uppercase;
     color: var(--text-muted);
     line-height: 1.2;
+}
+
+.car-card-metrics-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 2px;
+    max-width: 100%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: var(--text-muted);
+    line-height: 1.25;
+}
+
+.car-card-metrics-meta-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+    opacity: 0.55;
+}
+
+.car-card-metrics-meta-dot--high {
+    background: var(--accent-green);
+    opacity: 0.95;
+}
+
+.car-card-metrics-meta-dot--medium {
+    background: #d97706;
+    opacity: 0.9;
+}
+
+.car-card-metrics-meta-dot--low {
+    background: var(--text-muted);
+    opacity: 0.65;
+}
+
+.car-card-metrics-meta-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .car-card-metrics-col-value {

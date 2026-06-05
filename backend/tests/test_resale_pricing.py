@@ -133,6 +133,21 @@ def test_resale_service_falls_back_to_segment(db):
     assert out.resale_value > 0
 
 
+def test_segment_rebuild_handles_pipe_in_model(db):
+    _seed_comp(
+        db,
+        ext_id="pipe-1",
+        brand="Ford",
+        model="F-150|SuperCrew",
+        year=2018,
+        price=22000.0,
+        mileage=80_000,
+    )
+    created = rebuild_vehicle_price_segments(db)
+    assert created >= 1
+    db.commit()
+
+
 def test_resale_service_falls_back_to_heuristic_when_no_data(db):
     inp = PricingInput(
         external_listing_id="solo",

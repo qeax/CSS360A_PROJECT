@@ -66,7 +66,7 @@ def rebuild_vehicle_price_segments(db: Session) -> int:
         if not prices:
             continue
         miles = sorted(int(c.mileage) for c in cars if c.mileage is not None and c.mileage > 0)
-        brand, model, yb = key.split("|")
+        brand, model, yb = key.rsplit("|", 2)
         db.add(
             VehiclePriceSegment(
                 segment_key=key,

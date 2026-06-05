@@ -312,6 +312,10 @@ function renderPage(car) {
     }
     const settings = getSettings();
     const showEconomics = ui.shouldShowEconomics(car);
+    const economicsNoteHtml =
+        showEconomics && typeof ui.resaleEstimateDetailHtml === 'function'
+            ? ui.resaleEstimateDetailHtml(car)
+            : '';
     const metricsHtml = showEconomics
         ? `<div class="car-detail-pricing-metrics">${ui.metricsBlockHtml(car)}</div>`
         : '';
@@ -328,13 +332,16 @@ function renderPage(car) {
     const refreshBtn = isEbay
         ? '<button type="button" class="modal-refresh-btn" id="detailRefreshEbayBtn">Refresh from eBay</button>'
         : '';
+    const resaleBtn = showEconomics
+        ? '<button type="button" class="modal-resale-btn" id="detailResaleRefreshBtn">Recalculate resale</button>'
+        : '';
     const deleteBtn = settings.showDeleteCarButton
         ? '<button type="button" class="modal-delete-btn" id="detailDeleteCarBtn">Delete from database</button>'
         : '';
     const jsonBtn = settings.showListingJsonDebug
         ? '<button type="button" class="modal-json-debug-btn" id="detailViewRawJsonBtn">View raw JSON</button>'
         : '';
-    const actionBtns = [ebayBtn, refreshBtn, deleteBtn, jsonBtn].filter(Boolean).join('');
+    const actionBtns = [ebayBtn, refreshBtn, resaleBtn, deleteBtn, jsonBtn].filter(Boolean).join('');
     const images = Array.isArray(car.images) && car.images.length ? car.images : car.image_url ? [car.image_url] : [];
     const vehicleDetailsHtml =
         typeof ui.modalVehicleDetailsHtml === 'function' ? ui.modalVehicleDetailsHtml(car) : '';
@@ -366,6 +373,7 @@ function renderPage(car) {
                 ${ui.priceBlockHtml(car)}
                 ${metricsHtml}
             </div>
+            ${economicsNoteHtml}
             <div class="car-detail-divider" aria-hidden="true"></div>
             <div class="car-detail-cta-stack">
                 ${actionBtns ? `<div class="car-detail-actions-row">${actionBtns}</div>` : ''}
@@ -404,6 +412,53 @@ function renderPage(car) {
             btn.setAttribute('aria-label', next ? 'Remove from watchlist' : 'Add to watchlist');
         } catch (e) {
             console.error(e);
+        }
+    });
+
+    document.getElementById('detailResaleRefreshBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('detailResaleRefreshBtn');
+        btn.disabled = true;
+        btn.textContent = 'Recalculating…';
+        try {
+            const res = await fetch(`/api/cars/${car.id}/resale-refresh`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+            if (res.status === 401) {
+                window.location.replace('login.html');
+                return;
+            }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg =
+                    (typeof data.detail === 'object' && data.detail?.message) ||
+                    (typeof data.detail === 'string' && data.detail) ||
+                    `HTTP ${res.status}`;
+                throw new Error(msg);
+            }
+            try {
+                const key = 'css360_inventory_session_v1';
+                const raw = sessionStorage.getItem(key);
+                if (raw) {
+                    const payload = JSON.parse(raw);
+                    if (Array.isArray(payload?.carData)) {
+                        const idx = payload.carData.findIndex((x) => Number(x?.id) === Number(data.item?.id));
+                        if (idx >= 0) {
+                            payload.carData[idx] = data.item;
+                            payload.savedAt = Date.now();
+                            sessionStorage.setItem(key, JSON.stringify(payload));
+                        }
+                    }
+                }
+            } catch (err2) {
+                console.warn('Failed to patch inventory session after resale refresh', err2);
+            }
+            renderPage(data.item);
+        } catch (err) {
+            console.error(err);
+            showEbayToast(err.message || 'Failed to recalculate resale.', { variant: 'error' });
+            btn.disabled = false;
+            btn.textContent = 'Recalculate resale';
         }
     });
 

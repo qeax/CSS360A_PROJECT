@@ -204,7 +204,98 @@
 }
 
 .car-detail-pricing-metrics .car-card-metrics-compact {
-    min-width: 220px;
+    min-width: 240px;
+}
+
+.car-detail-economics-note {
+    margin-top: 0.85rem;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-page) 88%, var(--separator));
+}
+
+.car-detail-economics-note-title {
+    margin: 0 0 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.car-detail-economics-note-lead {
+    margin: 0 0 0.55rem;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--text-main);
+}
+
+.car-detail-economics-confidence {
+    display: inline-block;
+    margin-bottom: 0.65rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: help;
+}
+
+.car-detail-economics-confidence--high {
+    color: var(--accent-green);
+    background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+}
+
+.car-detail-economics-confidence--medium {
+    color: #d97706;
+    background: color-mix(in srgb, #d97706 14%, transparent);
+}
+
+.car-detail-economics-confidence--low {
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.car-detail-economics-dl {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.car-detail-economics-dl-row {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, auto) 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: baseline;
+}
+
+.car-detail-economics-dl dt {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.car-detail-economics-dl dd {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: var(--text-main);
+}
+
+.car-detail-economics-note-foot {
+    margin: 0.65rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-main);
+}
+
+.car-detail-economics-note-foot--muted {
+    color: var(--text-muted);
+    font-size: 0.78rem;
 }
 
 .car-detail-cta-stack {
@@ -255,6 +346,7 @@
 }
 
 .car-detail-actions-row .modal-refresh-btn,
+.car-detail-actions-row .modal-resale-btn,
 .car-detail-actions-row .modal-delete-btn,
 .car-detail-actions-row .modal-json-debug-btn {
     width: auto;
@@ -423,6 +515,11 @@
 
     .car-detail-pricing-row {
         grid-template-columns: 1fr;
+    }
+
+    .car-detail-economics-dl-row {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
     }
 
     .car-detail-spec-row {

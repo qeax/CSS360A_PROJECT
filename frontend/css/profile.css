@@ -76,7 +76,11 @@ img.profile-card-avatar {
 .profile-card-email {
     margin: 0;
     font-size: 0.9rem;
-    color: var(--topbar-muted);
+    color: var(--text-muted);
+}
+
+body.light-theme .profile-card-email {
+    color: color-mix(in srgb, var(--text-main) 55%, var(--text-muted));
 }
 
 .settings-toggles {

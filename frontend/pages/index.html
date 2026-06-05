@@ -82,7 +82,7 @@
                 <button type="button" class="filters-reset-btn" id="resetFiltersBtn">Reset</button>
             </div>
             <div class="filters-sidebar-scroll">
-                <section class="filter-section">
+                <section class="filter-section" data-filter-key="location" hidden>
                     <h3 class="filter-heading">Location</h3>
                     <div class="input-group filter-dropdown" data-loc-tier="country">
                         <span class="filter-dropdown-label" id="filterCountryLabel">Country</span>
@@ -114,8 +114,8 @@
                         <div class="range-value-row"><span id="filterRadiusMiLabel">50</span> mi</div>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="location" hidden>
+                <section class="filter-section" data-filter-key="price" hidden>
                     <h3 class="filter-heading">Price</h3>
                     <div class="dual-range" data-dual-range="price">
                         <input type="range" id="filterPriceMin" class="dual-range-input dual-range-input--min" min="0" max="100000" value="0" step="100">
@@ -126,8 +126,8 @@
                         <span id="filterPriceMinLabel">$0</span> – <span id="filterPriceMaxLabel">$0</span>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="price" hidden>
+                <section class="filter-section" data-filter-key="year" hidden>
                     <h3 class="filter-heading">Year</h3>
                     <div class="dual-range" data-dual-range="year">
                         <input type="range" id="filterYearMin" class="dual-range-input dual-range-input--min" min="1990" max="2030" value="1990" step="1">
@@ -138,8 +138,8 @@
                         <span id="filterYearMinLabel">1990</span> – <span id="filterYearMaxLabel">2030</span>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="year" hidden>
+                <section class="filter-section" data-filter-key="mileage" hidden>
                     <h3 class="filter-heading">Mileage (mi)</h3>
                     <div class="dual-range" data-dual-range="mileage">
                         <input type="range" id="filterMileageMin" class="dual-range-input dual-range-input--min" min="0" max="200000" value="0" step="500">
@@ -150,8 +150,8 @@
                         <span id="filterMileageMinLabel">0</span> – <span id="filterMileageMaxLabel">200000</span> mi
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="mileage" hidden>
+                <section class="filter-section" data-filter-key="make" hidden>
                     <h3 class="filter-heading">Make</h3>
                     <div class="input-group filter-dropdown" data-loc-tier="make" data-filter="make">
                         <span class="filter-dropdown-label" id="filterMakeLabel">Make</span>
@@ -162,33 +162,33 @@
                         </div>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="make" hidden>
+                <section class="filter-section" data-filter-key="body" hidden>
                     <h3 class="filter-heading">Body type</h3>
                     <div class="chip-group" id="filterBodyTypes" role="group" aria-label="Body types"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="body" hidden>
+                <section class="filter-section" data-filter-key="delivery" hidden>
                     <h3 class="filter-heading">Delivery</h3>
                     <div class="chip-group" id="filterDelivery" role="group" aria-label="Delivery options"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="delivery" hidden>
+                <section class="filter-section" data-filter-key="condition" hidden>
                     <h3 class="filter-heading">Condition</h3>
                     <div class="chip-group" id="filterConditions" role="group" aria-label="Condition"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="condition" hidden>
+                <section class="filter-section" data-filter-key="format" hidden>
                     <h3 class="filter-heading">Buying format</h3>
                     <div class="chip-group" id="filterListingFormats" role="group" aria-label="Listing format"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="format" hidden>
+                <section class="filter-section" data-filter-key="title" hidden>
                     <h3 class="filter-heading">Vehicle title</h3>
                     <div class="chip-group" id="filterVehicleTitles" role="group" aria-label="Vehicle title"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="title" hidden>
+                <section class="filter-section" data-filter-key="profitability">
                     <h3 class="filter-heading">Profitability</h3>
                     <label class="filter-toggle" for="filterExcludeNegativeProfit">
                         <input type="checkbox" id="filterExcludeNegativeProfit">

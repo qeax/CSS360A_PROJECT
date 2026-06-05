@@ -6,6 +6,7 @@ const VIEW_STORAGE_KEY = 'inventory_view';
 const SORT_DESC_KEY = 'inventory_sort_desc';
 const PAGE_SIZE = 50;
 const INVENTORY_SESSION_KEY = 'css360_inventory_session_v1';
+const FILTER_PREFS_KEY = 'css360_filter_prefs_v1';
 const INVENTORY_SESSION_TTL_MS = 30 * 60 * 1000;
 const LOCATION_NOT_SPECIFIED = '__not_specified__';
 const LOCATION_NOT_SPECIFIED_LABEL = 'Not specified';
@@ -13,6 +14,9 @@ const MAX_CAROUSEL_DOTS = 7;
 const YEAR_GAP = 1;
 const PRICE_GAP = 100;
 const MILEAGE_GAP = 500;
+
+/** @type {Record<string, any> | null} */
+let pendingCustomFilters = null;
 
 let carData = [];
 let currentResults = [];
@@ -405,9 +409,58 @@ function modalPurchasePriceHtml(car) {
     return `$${Number(car.price).toLocaleString()}`;
 }
 
+function areFiltersUserCustomized() {
+    try {
+        return JSON.parse(sessionStorage.getItem(FILTER_PREFS_KEY))?.userCustomized === true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function setFiltersUserCustomized(value) {
+    try {
+        sessionStorage.setItem(FILTER_PREFS_KEY, JSON.stringify({ userCustomized: !!value }));
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function markFiltersUserCustomized() {
+    setFiltersUserCustomized(true);
+}
+
+function resetProfitabilityFilterDefaults() {
+    const minRoi = document.getElementById('filterMinRoi');
+    const minProfit = document.getElementById('filterMinProfit');
+    if (minRoi) minRoi.value = '';
+    if (minProfit) minProfit.value = '';
+    const excludeProfit = document.getElementById('filterExcludeNegativeProfit');
+    if (excludeProfit) excludeProfit.checked = false;
+    const excludeEnded = document.getElementById('filterExcludeEndedAuctions');
+    if (excludeEnded) excludeEnded.checked = true;
+    const excludeUnknown = document.getElementById('filterExcludeUnknownPrice');
+    if (excludeUnknown) excludeUnknown.checked = false;
+}
+
+function resetRadiusFilterDefaults() {
+    const radiusIn = document.getElementById('filterRadiusMi');
+    const radiusLab = document.getElementById('filterRadiusMiLabel');
+    const radiusWrap = document.getElementById('radiusFilterWrap');
+    if (radiusIn) radiusIn.value = '50';
+    if (radiusLab) radiusLab.textContent = '50';
+    if (radiusWrap) {
+        delete radiusWrap.dataset.anchorLat;
+        delete radiusWrap.dataset.anchorLng;
+    }
+}
+
 function buildChipGroup(containerId, items, getValue, getLabel) {
     const el = document.getElementById(containerId);
     if (!el) return;
+    if (!items.length) {
+        el.innerHTML = '';
+        return;
+    }
     el.innerHTML = items
         .map(
             (item) => `
@@ -420,8 +473,132 @@ function buildChipGroup(containerId, items, getValue, getLabel) {
         btn.addEventListener('click', () => {
             const pressed = btn.getAttribute('aria-pressed') === 'true';
             btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+            markFiltersUserCustomized();
         });
     });
+}
+
+function metaHasAnyFacet(meta) {
+    return Boolean(
+        (meta.makes?.length ?? 0) > 0 ||
+        (meta.countries?.length ?? 0) > 0 ||
+        (meta.body_styles?.length ?? 0) > 0 ||
+        (meta.conditions?.length ?? 0) > 0 ||
+        (meta.listing_formats?.length ?? 0) > 0 ||
+        (meta.vehicle_titles?.length ?? 0) > 0
+    );
+}
+
+function inventoryHasDbRows(meta) {
+    if (!meta) return false;
+    if (meta.inventory_source === 'demo') return true;
+    if (meta.inventory_source === 'empty') return false;
+    return meta.inventory_source === 'database' && metaHasAnyFacet(meta);
+}
+
+function listingFormatChipsFromMeta(meta) {
+    const formats = meta?.listing_formats;
+    if (!formats?.length) return [];
+    const byValue = Object.fromEntries(FILTER_LISTING_FORMATS.map((x) => [x.value, x]));
+    return formats.map((f) => byValue[f] || { value: f, label: LISTING_FORMAT_LABELS[f] || f });
+}
+
+function chipItemsFromMeta(meta, kind) {
+    if (!meta) return [];
+    if (kind === 'body') return meta.body_styles?.length ? meta.body_styles : [];
+    if (kind === 'condition') return meta.conditions?.length ? meta.conditions : [];
+    if (kind === 'format') return listingFormatChipsFromMeta(meta);
+    if (kind === 'title') return meta.vehicle_titles?.length ? meta.vehicle_titles : [];
+    if (kind === 'delivery') return inventoryHasDbRows(meta) ? DELIVERY_CHIPS : [];
+    return [];
+}
+
+function filterAvailability(meta) {
+    const hasDb = inventoryHasDbRows(meta);
+    const locNs = meta?.location_not_specified || {};
+    return {
+        location:
+            hasDb &&
+            Boolean((meta?.countries?.length ?? 0) > 0 || locNs.country || locNs.region || locNs.city),
+        price: hasDb && metaSliderBounds(meta, 'price') != null,
+        year: hasDb && metaSliderBounds(meta, 'year') != null,
+        mileage: hasDb && metaSliderBounds(meta, 'mileage') != null,
+        make: hasDb && (meta?.makes?.length ?? 0) > 0,
+        body: hasDb && (meta?.body_styles?.length ?? 0) > 0,
+        delivery: hasDb,
+        condition: hasDb && (meta?.conditions?.length ?? 0) > 0,
+        format: hasDb && (meta?.listing_formats?.length ?? 0) > 0,
+        title: hasDb && (meta?.vehicle_titles?.length ?? 0) > 0,
+        profitability: true,
+    };
+}
+
+function updateFilterVisibility(meta) {
+    const avail = filterAvailability(meta);
+    document.querySelectorAll('[data-filter-key]').forEach((el) => {
+        const key = el.dataset.filterKey;
+        if (!key || key === 'profitability') return;
+        const show = !!avail[key];
+        el.hidden = !show;
+    });
+    const prof = document.querySelector('[data-filter-key="profitability"]');
+    if (prof) prof.hidden = false;
+    const titleDivider = document.querySelector('hr[data-filter-key="title"]');
+    if (titleDivider) titleDivider.hidden = !avail.title;
+}
+
+function rebuildChipGroup(containerId, items, getValue, getLabel, { preserve = true } = {}) {
+    const prevSelected = preserve ? new Set(getSelectedChipValues(containerId)) : new Set();
+    const validValues = new Set(items.map((item) => getValue(item)));
+    buildChipGroup(containerId, items, getValue, getLabel);
+    if (!preserve || !prevSelected.size) return;
+    const root = document.getElementById(containerId);
+    if (!root) return;
+    root.querySelectorAll('.filter-chip').forEach((btn) => {
+        const on = prevSelected.has(btn.dataset.value) && validValues.has(btn.dataset.value);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+}
+
+function pruneMakeAndLocationSelections() {
+    if (!inventoryMeta) return;
+    const allowedCountries = new Set(inventoryMeta.countries || []);
+    if (inventoryMeta.location_not_specified?.country) {
+        allowedCountries.add(LOCATION_NOT_SPECIFIED);
+    }
+    for (const c of Array.from(locSelection.countries)) {
+        if (!allowedCountries.has(c)) locSelection.countries.delete(c);
+    }
+    pruneLocationChildren();
+    const allowedMakes = new Set(inventoryMeta.makes || []);
+    for (const m of Array.from(makeSelection)) {
+        if (!allowedMakes.has(m)) makeSelection.delete(m);
+    }
+}
+
+function populateMetaChipFilters(meta, preserveSelections) {
+    rebuildChipGroup('filterBodyTypes', chipItemsFromMeta(meta, 'body'), (x) => x, (x) => x, {
+        preserve: preserveSelections,
+    });
+    rebuildChipGroup('filterConditions', chipItemsFromMeta(meta, 'condition'), (x) => x, (x) => x, {
+        preserve: preserveSelections,
+    });
+    rebuildChipGroup(
+        'filterListingFormats',
+        chipItemsFromMeta(meta, 'format'),
+        (x) => x.value,
+        (x) => x.label,
+        { preserve: preserveSelections }
+    );
+    rebuildChipGroup('filterVehicleTitles', chipItemsFromMeta(meta, 'title'), (x) => x, (x) => x, {
+        preserve: preserveSelections,
+    });
+    rebuildChipGroup('filterDelivery', chipItemsFromMeta(meta, 'delivery'), (x) => x.value, (x) => x.label, {
+        preserve: preserveSelections,
+    });
+    updateLocationTriggerLabels();
+    updateMakeTriggerLabel();
+    updateLocationTierUi();
 }
 
 function escapeHtml(s) {
@@ -721,6 +898,7 @@ function renderMakePanel() {
             if (cb.checked) makeSelection.add(cb.value);
             else makeSelection.delete(cb.value);
             updateMakeTriggerLabel();
+            markFiltersUserCustomized();
         });
     });
 }
@@ -734,6 +912,7 @@ function wireLocationCheckboxes(container, kind, onChange) {
             if (cb.checked) set.add(val);
             else set.delete(val);
             updateLocationTriggerLabels();
+            markFiltersUserCustomized();
             onChange();
         });
     });
@@ -772,90 +951,137 @@ function initFilterDropdowns() {
     });
 }
 
-function populateMetaIntoUi(meta, resetValues = true) {
+function metaSliderBounds(meta, kind) {
+    if (!meta) return null;
+    if (kind === 'price') {
+        if (!(meta.max_price > meta.min_price)) return null;
+        const lo = Math.floor(meta.min_price / 100) * 100;
+        const hi = Math.ceil(meta.max_price / 100) * 100;
+        return hi > lo ? { lo, hi } : null;
+    }
+    if (kind === 'year') {
+        const yLo = Number(meta.min_year);
+        const yHi = Number(meta.max_year);
+        return yHi > yLo ? { lo: yLo, hi: yHi } : null;
+    }
+    if (kind === 'mileage') {
+        if (meta.min_mileage == null || meta.max_mileage == null) return null;
+        const lo = Number(meta.min_mileage);
+        const hi = Number(meta.max_mileage);
+        if (!(hi > lo)) return null;
+        const step = 500;
+        return {
+            lo: Math.floor(lo / step) * step,
+            hi: Math.ceil(hi / step) * step,
+        };
+    }
+    return null;
+}
+
+function rangeValuesMatchBounds(lo, hi, bounds) {
+    if (!bounds) return false;
+    return Math.round(lo) === Math.round(bounds.lo) && Math.round(hi) === Math.round(bounds.hi);
+}
+
+/** Expand slider thumbs when they still match the previous full DB span. */
+function syncRangeValuesIfWideOpen(prevMeta) {
+    const kinds = [
+        ['price', 'filterPriceMin', 'filterPriceMax'],
+        ['year', 'filterYearMin', 'filterYearMax'],
+        ['mileage', 'filterMileageMin', 'filterMileageMax'],
+    ];
+    for (const [kind, minId, maxId] of kinds) {
+        const minEl = document.getElementById(minId);
+        const maxEl = document.getElementById(maxId);
+        if (!minEl || !maxEl) continue;
+        const lo = Number(minEl.value);
+        const hi = Number(maxEl.value);
+        const newBounds = metaSliderBounds(inventoryMeta, kind);
+        if (!newBounds) continue;
+        const prevBounds = metaSliderBounds(prevMeta, kind);
+        if (!rangeValuesMatchBounds(lo, hi, prevBounds)) continue;
+        minEl.value = String(newBounds.lo);
+        maxEl.value = String(newBounds.hi);
+        updateDualRangeLabels(kind, newBounds.lo, newBounds.hi);
+    }
+}
+
+function applyMetaRangeAttrs(kind, bounds, minEl, maxEl) {
+    if (!bounds || !minEl || !maxEl) return;
+    if (kind === 'year') {
+        minEl.min = String(bounds.lo);
+        minEl.max = String(bounds.hi);
+        maxEl.min = String(bounds.lo);
+        maxEl.max = String(bounds.hi);
+    } else {
+        minEl.min = String(bounds.lo);
+        minEl.max = String(bounds.hi);
+        maxEl.min = String(bounds.lo);
+        maxEl.max = String(bounds.hi);
+    }
+}
+
+function populateMetaIntoUi(meta, options = {}) {
+    const forceFullBounds = options.forceFullBounds ?? !areFiltersUserCustomized();
+    const applyFullRange = options.resetValues ?? forceFullBounds;
+    const prevMeta = inventoryMeta;
     inventoryMeta = meta;
+
+    if (forceFullBounds) {
+        clearLocationSelections();
+        makeSelection.clear();
+        resetProfitabilityFilterDefaults();
+        resetRadiusFilterDefaults();
+    }
+
     const pmin = document.getElementById('filterPriceMin');
     const pmax = document.getElementById('filterPriceMax');
     const ymin = document.getElementById('filterYearMin');
     const ymax = document.getElementById('filterYearMax');
     const mmin = document.getElementById('filterMileageMin');
     const mmax = document.getElementById('filterMileageMax');
-    if (pmin && pmax) {
-        let lo = Math.floor(meta.min_price / 100) * 100;
-        let hi = Math.ceil(meta.max_price / 100) * 100;
-        if (hi <= lo) {
-            lo = 0;
-            hi = 42500;
-        }
-        [pmin, pmax].forEach((el) => {
-            el.min = String(lo);
-            el.max = String(hi);
-        });
-        if (resetValues) {
-            pmin.value = String(lo);
-            pmax.value = String(hi);
-            updateDualRangeLabels('price', lo, hi);
+
+    const priceBounds = metaSliderBounds(meta, 'price');
+    if (priceBounds && pmin && pmax) {
+        applyMetaRangeAttrs('price', priceBounds, pmin, pmax);
+        if (applyFullRange) {
+            pmin.value = String(priceBounds.lo);
+            pmax.value = String(priceBounds.hi);
+            updateDualRangeLabels('price', priceBounds.lo, priceBounds.hi);
         }
     }
-    if (ymin && ymax) {
-        let yLo = Number(meta.min_year);
-        let yHi = Number(meta.max_year);
-        if (yHi <= yLo) {
-            yLo = 2000;
-            yHi = 2025;
-        }
-        ymin.min = String(yLo);
-        ymin.max = String(yHi);
-        ymax.min = String(yLo);
-        ymax.max = String(yHi);
-        if (resetValues) {
-            ymin.value = String(yLo);
-            ymax.value = String(yHi);
-            updateDualRangeLabels('year', yLo, yHi);
+    const yearBounds = metaSliderBounds(meta, 'year');
+    if (yearBounds && ymin && ymax) {
+        applyMetaRangeAttrs('year', yearBounds, ymin, ymax);
+        if (applyFullRange) {
+            ymin.value = String(yearBounds.lo);
+            ymax.value = String(yearBounds.hi);
+            updateDualRangeLabels('year', yearBounds.lo, yearBounds.hi);
         }
     }
-    if (mmin && mmax && meta.min_mileage != null && meta.max_mileage != null) {
-        let lo = Number(meta.min_mileage);
-        let hi = Number(meta.max_mileage);
-        if (hi <= lo) {
-            lo = 8000;
-            hi = 145000;
-        }
-        const step = 500;
-        const loR = Math.floor(lo / step) * step;
-        const hiR = Math.ceil(hi / step) * step;
-        [mmin, mmax].forEach((el) => {
-            el.min = String(loR);
-            el.max = String(hiR);
-        });
-        if (resetValues) {
-            mmin.value = String(loR);
-            mmax.value = String(hiR);
-            updateDualRangeLabels('mileage', loR, hiR);
+    const mileageBounds = metaSliderBounds(meta, 'mileage');
+    if (mileageBounds && mmin && mmax) {
+        applyMetaRangeAttrs('mileage', mileageBounds, mmin, mmax);
+        if (applyFullRange) {
+            mmin.value = String(mileageBounds.lo);
+            mmax.value = String(mileageBounds.hi);
+            updateDualRangeLabels('mileage', mileageBounds.lo, mileageBounds.hi);
         }
     }
 
-    const chipsMissing = !document.getElementById('filterBodyTypes')?.childElementCount;
-    if (resetValues || chipsMissing) {
-        buildChipGroup('filterBodyTypes', FILTER_BODY_STYLES, (x) => x, (x) => x);
-        buildChipGroup('filterConditions', FILTER_CONDITIONS, (x) => x, (x) => x);
-        buildChipGroup(
-            'filterListingFormats',
-            FILTER_LISTING_FORMATS,
-            (x) => x.value,
-            (x) => x.label
-        );
-        buildChipGroup('filterVehicleTitles', FILTER_VEHICLE_TITLES, (x) => x, (x) => x);
-
-        buildChipGroup('filterDelivery', DELIVERY_CHIPS, (x) => x.value, (x) => x.label);
-        updateLocationTriggerLabels();
-        updateMakeTriggerLabel();
-        updateLocationTierUi();
+    populateMetaChipFilters(meta, !applyFullRange);
+    if (!applyFullRange) {
+        pruneMakeAndLocationSelections();
+        if (areFiltersUserCustomized()) {
+            syncRangeValuesIfWideOpen(prevMeta);
+        }
     }
     renderCountryPanel();
     renderMakePanel();
     refreshRegionOptions();
     refreshCityOptions();
+    updateRadiusAvailability();
+    updateFilterVisibility(meta);
 }
 
 function updateDualRangeLabels(kind, minV, maxV) {
@@ -905,8 +1131,12 @@ function wireDualRange(kind, minEl, maxEl) {
         maxEl.value = String(hi);
         updateDualRangeLabels(kind, lo, hi);
     };
-    minEl.addEventListener('input', sync);
-    maxEl.addEventListener('input', sync);
+    const onUserInput = () => {
+        sync();
+        markFiltersUserCustomized();
+    };
+    minEl.addEventListener('input', onUserInput);
+    maxEl.addEventListener('input', onUserInput);
 }
 
 function refreshRegionOptions() {
@@ -957,17 +1187,33 @@ function scrollInventoryToTop() {
     document.querySelector('.inventory-toolbar-strip')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function fetchMeta() {
-    const res = await fetch('/api/cars/meta', { credentials: 'include' });
-    if (res.status === 401) {
-        window.location.replace('login.html');
-        return null;
-    }
-    if (!res.ok) {
+async function applyFreshInventoryMeta() {
+    const meta = await fetchMeta();
+    if (!meta) return;
+    populateMetaIntoUi(meta);
+    refreshRegionOptions();
+    refreshCityOptions();
+    updateRadiusAvailability();
+    updateLocationTierUi();
+    updateMakeTriggerLabel();
+}
+
+async function fetchMeta(retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+        const res = await fetch('/api/cars/meta', { credentials: 'include' });
+        if (res.status === 401) {
+            window.location.replace('login.html');
+            return null;
+        }
+        if (res.ok) return res.json();
+        if (res.status === 503 && attempt < retries) {
+            await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+            continue;
+        }
         console.warn('fetchMeta failed:', res.status);
         return null;
     }
-    return res.json();
+    return null;
 }
 
 function collectFilterSnapshot() {
@@ -1006,7 +1252,7 @@ function collectFilterSnapshot() {
     };
 }
 
-function applyFilterSnapshot(snapshot) {
+function applyNavigationSnapshot(snapshot) {
     if (!snapshot) return;
     const searchInput = document.getElementById('globalSearchInput');
     if (searchInput) searchInput.value = snapshot.globalSearch ?? '';
@@ -1017,6 +1263,11 @@ function applyFilterSnapshot(snapshot) {
         localStorage.setItem(SORT_DESC_KEY, sortDesc ? 'true' : 'false');
         applySortOrderClass();
     }
+}
+
+function applyFilterSnapshot(snapshot) {
+    if (!snapshot) return;
+    applyNavigationSnapshot(snapshot);
     locSelection.countries = new Set(snapshot.locSelection?.countries ?? []);
     locSelection.regions = new Set(snapshot.locSelection?.regions ?? []);
     locSelection.cities = new Set(snapshot.locSelection?.cities ?? []);
@@ -1074,6 +1325,12 @@ function applyFilterSnapshot(snapshot) {
     updateMakeTriggerLabel();
 }
 
+function applyPendingCustomFilters() {
+    if (!pendingCustomFilters || !areFiltersUserCustomized()) return;
+    applyFilterSnapshot(pendingCustomFilters);
+    pendingCustomFilters = null;
+}
+
 function saveInventorySession() {
     try {
         const payload = {
@@ -1082,6 +1339,7 @@ function saveInventorySession() {
             ebayBatchMeta,
             lastDataMode,
             filters: collectFilterSnapshot(),
+            filtersUserCustomized: areFiltersUserCustomized(),
             scrollY: window.scrollY,
             savedAt: Date.now(),
         };
@@ -1119,7 +1377,15 @@ function restoreInventorySession() {
         ebayBatchMeta = payload.ebayBatchMeta ?? null;
         lastDataMode = payload.lastDataMode ?? 'database';
 
-        applyFilterSnapshot(payload.filters);
+        const customized = !!payload.filtersUserCustomized;
+        setFiltersUserCustomized(customized);
+        applyNavigationSnapshot(payload.filters);
+        if (customized) {
+            pendingCustomFilters = payload.filters;
+        } else {
+            pendingCustomFilters = null;
+        }
+
         updateUI(currentResults);
         updateResultsHintAndLoadMore();
 
@@ -1328,6 +1594,9 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
         updateUI(currentResults);
         updateResultsHintAndLoadMore();
         saveInventorySession();
+        if (!append) {
+            await applyFreshInventoryMeta();
+        }
         if (!append && shouldScrollToTop) {
             requestAnimationFrame(() => scrollInventoryToTop());
         }
@@ -1989,25 +2258,15 @@ function showConfirmDialog(opts) {
 }
 
 function resetFilters() {
-    document.querySelectorAll('.filter-chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-    document.getElementById('filterMinRoi').value = '';
-    document.getElementById('filterMinProfit').value = '';
-    const excludeProfit = document.getElementById('filterExcludeNegativeProfit');
-    if (excludeProfit) excludeProfit.checked = false;
-    const excludeEnded = document.getElementById('filterExcludeEndedAuctions');
-    if (excludeEnded) excludeEnded.checked = true;
-    const excludeUnknownPrice = document.getElementById('filterExcludeUnknownPrice');
-    if (excludeUnknownPrice) excludeUnknownPrice.checked = false;
-    makeSelection.clear();
-    clearLocationSelections();
-    if (inventoryMeta) populateMetaIntoUi(inventoryMeta);
+    setFiltersUserCustomized(false);
+    pendingCustomFilters = null;
+    if (inventoryMeta) {
+        populateMetaIntoUi(inventoryMeta, { forceFullBounds: true });
+    }
     refreshRegionOptions();
     refreshCityOptions();
     updateRadiusAvailability();
     updateMakeTriggerLabel();
-    const rlab = document.getElementById('filterRadiusMiLabel');
-    const rIn = document.getElementById('filterRadiusMi');
-    if (rIn && rlab) rlab.textContent = rIn.value;
     executeSearch({ append: false });
 }
 
@@ -2015,6 +2274,7 @@ function initFilterToggles() {
     document.querySelectorAll('.filter-toggle').forEach((label) => {
         const input = label.querySelector('input[type="checkbox"]');
         if (!input) return;
+        input.addEventListener('change', () => markFiltersUserCustomized());
         input.tabIndex = -1;
         // Prevent focus scroll when clicking custom toggle switches in the sidebar.
         label.addEventListener('mousedown', (e) => {
@@ -2051,7 +2311,11 @@ function initEventListeners() {
     document.getElementById('filterRadiusMi')?.addEventListener('input', (e) => {
         const lab = document.getElementById('filterRadiusMiLabel');
         if (lab) lab.textContent = e.target.value;
+        markFiltersUserCustomized();
     });
+
+    document.getElementById('filterMinRoi')?.addEventListener('input', () => markFiltersUserCustomized());
+    document.getElementById('filterMinProfit')?.addEventListener('input', () => markFiltersUserCustomized());
 
     document.querySelector('a.app-account-menu-item[href="settings.html"]')?.addEventListener('click', () => {
         saveInventorySession();
@@ -2060,17 +2324,6 @@ function initEventListeners() {
     window.addEventListener('pagehide', () => {
         saveInventorySession();
     });
-}
-
-function reapplySavedFilterSnapshot() {
-    try {
-        const raw = sessionStorage.getItem(INVENTORY_SESSION_KEY);
-        if (!raw) return;
-        const payload = JSON.parse(raw);
-        if (payload?.filters) applyFilterSnapshot(payload.filters);
-    } catch (_) {
-        /* ignore */
-    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2094,15 +2347,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     const restored = restoreInventorySession();
 
     let meta = await fetchMeta();
-    if (meta) populateMetaIntoUi(meta, !restored);
-    if (restored) reapplySavedFilterSnapshot();
+    if (meta) populateMetaIntoUi(meta);
+    applyPendingCustomFilters();
+
+    refreshRegionOptions();
+    refreshCityOptions();
+    updateRadiusAvailability();
+    updateLocationTierUi();
+    updateMakeTriggerLabel();
 
     if (restored) {
         const metaFresh = await fetchMeta();
-        if (metaFresh) {
-            populateMetaIntoUi(metaFresh, false);
-            reapplySavedFilterSnapshot();
-        }
+        if (metaFresh) populateMetaIntoUi(metaFresh);
+        applyPendingCustomFilters();
         refreshRegionOptions();
         refreshCityOptions();
         updateRadiusAvailability();
@@ -2111,18 +2368,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    refreshRegionOptions();
-    refreshCityOptions();
-    updateRadiusAvailability();
-    updateLocationTierUi();
-
     await executeSearch({ append: false, syncEbay: true });
-    const metaAfterSync = (await fetchMeta()) || meta;
-    if (metaAfterSync) {
-        populateMetaIntoUi(metaAfterSync, false);
-        refreshRegionOptions();
-        refreshCityOptions();
-        updateRadiusAvailability();
-        updateLocationTierUi();
-    }
 });
