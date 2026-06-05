@@ -1,0 +1,181 @@
+.app-topbar--compact .app-topbar-spacer {
+    flex: 1;
+}
+
+.profile-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+}
+
+.profile-back {
+    display: inline-block;
+    margin-bottom: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--topbar-accent);
+    text-decoration: none;
+}
+
+.profile-back:hover {
+    text-decoration: underline;
+}
+
+.profile-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 24px;
+    border-radius: 16px;
+    border: 1px solid var(--topbar-border);
+    background: var(--ui-bg);
+    text-align: center;
+}
+
+.profile-card-avatar-wrap {
+    position: relative;
+    width: 96px;
+    height: 96px;
+}
+
+.profile-card-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+img.profile-card-avatar {
+    object-fit: cover;
+    display: block;
+}
+
+.profile-card-avatar--fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, var(--topbar-accent), color-mix(in srgb, var(--topbar-accent) 55%, #000));
+}
+
+.profile-card-avatar[hidden],
+.profile-card-avatar--fallback[hidden] {
+    display: none;
+}
+
+.profile-card-name {
+    margin: 8px 0 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.profile-card-email {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+body.light-theme .profile-card-email {
+    color: color-mix(in srgb, var(--text-main) 55%, var(--text-muted));
+}
+
+.settings-toggles {
+    align-self: stretch;
+    width: 100%;
+    text-align: left;
+}
+
+.settings-toggles .settings-toggle {
+    margin-bottom: 12px;
+}
+
+.settings-toggles .settings-toggle:last-child {
+    margin-bottom: 0;
+}
+
+.settings-actions {
+    align-self: stretch;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.settings-test-notification-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-test-notification-btn:hover:not(:disabled) {
+    background: var(--bg-page);
+    border-color: var(--text-muted);
+}
+
+.settings-test-notification-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.settings-test-notification-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.profile-watchlist {
+    margin-top: 32px;
+}
+
+.profile-watchlist-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.profile-watchlist-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.profile-watchlist-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.profile-watchlist-count {
+    font-size: 0.875rem;
+    color: var(--topbar-muted);
+}
+
+.profile-watchlist-empty {
+    padding: 24px;
+    border-radius: 12px;
+    border: 1px dashed var(--topbar-border);
+    color: var(--topbar-muted);
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.profile-watchlist .inventory {
+    margin: 0;
+}

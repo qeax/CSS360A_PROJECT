@@ -24,6 +24,18 @@ services:
         networks:
             - css360_internal
             - proxy_network
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+                ]
+            interval: 5s
+            timeout: 5s
+            retries: 12
+            start_period: 45s
         labels:
             - "traefik.enable=true"
             # Router for backend: catching everything from the path /api/
@@ -42,7 +54,7 @@ services:
         restart: unless-stopped
         depends_on:
             backend:
-                condition: service_started
+                condition: service_healthy
         networks:
             - css360_internal
             - proxy_network

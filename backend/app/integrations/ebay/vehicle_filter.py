@@ -6,7 +6,7 @@ import os
 import re
 from typing import Any
 
-_YEAR_IN_TITLE_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
+_YEAR_IN_TITLE_RE = re.compile(r"\b(19[0-9]\d|20[0-3]\d)\b")
 
 _NON_VEHICLE_MARKERS = frozenset(
     {

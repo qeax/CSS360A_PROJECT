@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Car Flip Marketplace</title>
-    <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20260520">
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/styles.css?v=20260606">
 </head>
 <body>
     <header class="app-topbar" role="banner">
@@ -31,6 +31,21 @@
             </button>
         </div>
         <div class="app-topbar-actions">
+            <div class="app-notifications-wrap">
+                <button type="button" class="app-icon-btn" id="notificationsBtn" aria-label="Notifications" aria-expanded="false" aria-controls="notificationsPanel" title="Notifications">
+                    <span class="app-notifications-badge" id="notificationsBadge" hidden></span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+                    </svg>
+                </button>
+                <div class="app-notifications-panel" id="notificationsPanel" hidden>
+                    <div class="app-notifications-panel-header">
+                        <span>Notifications</span>
+                        <button type="button" class="app-notifications-read-all" id="notificationsReadAllBtn">Mark all read</button>
+                    </div>
+                    <div id="notificationsList"></div>
+                </div>
+            </div>
             <button type="button" class="app-icon-btn" id="themeToggleBtn" aria-label="Toggle theme" title="Toggle theme">
                 <svg class="app-icon-btn-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
@@ -41,12 +56,20 @@
             </button>
             <div class="app-account" id="appAccountWrap">
                 <button type="button" class="app-account-trigger" id="accountMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="accountMenu">
-                    <span class="app-account-avatar" aria-hidden="true"></span>
-                    <span class="app-account-email" id="accountEmailLabel">Account</span>
+                    <span class="app-account-avatar-wrap">
+                        <img class="app-account-avatar" id="accountAvatarImg" alt="" width="28" height="28" hidden>
+                        <span class="app-account-avatar app-account-avatar--fallback" id="accountAvatarFallback" aria-hidden="true"></span>
+                    </span>
+                    <span class="app-account-label">
+                        <span class="app-account-name" id="accountDisplayName">Account</span>
+                        <span class="app-account-email" id="accountEmailLabel"></span>
+                    </span>
                     <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 4l4 4 4-4z"/></svg>
                 </button>
                 <div class="app-account-menu" id="accountMenu" role="menu" hidden>
-                    <a class="app-account-menu-item" role="menuitem" href="/api/auth/logout">Log out</a>
+                    <a class="app-account-menu-item" role="menuitem" href="profile.html">Profile</a>
+                    <a class="app-account-menu-item" role="menuitem" href="settings.html">Settings</a>
+                    <a class="app-account-menu-item app-account-menu-item--logout" role="menuitem" href="/api/auth/logout">Log out</a>
                 </div>
             </div>
         </div>
@@ -59,7 +82,7 @@
                 <button type="button" class="filters-reset-btn" id="resetFiltersBtn">Reset</button>
             </div>
             <div class="filters-sidebar-scroll">
-                <section class="filter-section">
+                <section class="filter-section" data-filter-key="location" hidden>
                     <h3 class="filter-heading">Location</h3>
                     <div class="input-group filter-dropdown" data-loc-tier="country">
                         <span class="filter-dropdown-label" id="filterCountryLabel">Country</span>
@@ -91,8 +114,8 @@
                         <div class="range-value-row"><span id="filterRadiusMiLabel">50</span> mi</div>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="location" hidden>
+                <section class="filter-section" data-filter-key="price" hidden>
                     <h3 class="filter-heading">Price</h3>
                     <div class="dual-range" data-dual-range="price">
                         <input type="range" id="filterPriceMin" class="dual-range-input dual-range-input--min" min="0" max="100000" value="0" step="100">
@@ -103,8 +126,8 @@
                         <span id="filterPriceMinLabel">$0</span> – <span id="filterPriceMaxLabel">$0</span>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="price" hidden>
+                <section class="filter-section" data-filter-key="year" hidden>
                     <h3 class="filter-heading">Year</h3>
                     <div class="dual-range" data-dual-range="year">
                         <input type="range" id="filterYearMin" class="dual-range-input dual-range-input--min" min="1990" max="2030" value="1990" step="1">
@@ -115,8 +138,8 @@
                         <span id="filterYearMinLabel">1990</span> – <span id="filterYearMaxLabel">2030</span>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="year" hidden>
+                <section class="filter-section" data-filter-key="mileage" hidden>
                     <h3 class="filter-heading">Mileage (mi)</h3>
                     <div class="dual-range" data-dual-range="mileage">
                         <input type="range" id="filterMileageMin" class="dual-range-input dual-range-input--min" min="0" max="200000" value="0" step="500">
@@ -127,8 +150,8 @@
                         <span id="filterMileageMinLabel">0</span> – <span id="filterMileageMaxLabel">200000</span> mi
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="mileage" hidden>
+                <section class="filter-section" data-filter-key="make" hidden>
                     <h3 class="filter-heading">Make</h3>
                     <div class="input-group filter-dropdown" data-loc-tier="make" data-filter="make">
                         <span class="filter-dropdown-label" id="filterMakeLabel">Make</span>
@@ -139,34 +162,49 @@
                         </div>
                     </div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="make" hidden>
+                <section class="filter-section" data-filter-key="body" hidden>
                     <h3 class="filter-heading">Body type</h3>
                     <div class="chip-group" id="filterBodyTypes" role="group" aria-label="Body types"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="body" hidden>
+                <section class="filter-section" data-filter-key="delivery" hidden>
                     <h3 class="filter-heading">Delivery</h3>
                     <div class="chip-group" id="filterDelivery" role="group" aria-label="Delivery options"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="delivery" hidden>
+                <section class="filter-section" data-filter-key="condition" hidden>
                     <h3 class="filter-heading">Condition</h3>
                     <div class="chip-group" id="filterConditions" role="group" aria-label="Condition"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="condition" hidden>
+                <section class="filter-section" data-filter-key="format" hidden>
                     <h3 class="filter-heading">Buying format</h3>
                     <div class="chip-group" id="filterListingFormats" role="group" aria-label="Listing format"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="format" hidden>
+                <section class="filter-section" data-filter-key="title" hidden>
                     <h3 class="filter-heading">Vehicle title</h3>
                     <div class="chip-group" id="filterVehicleTitles" role="group" aria-label="Vehicle title"></div>
                 </section>
-                <hr class="filter-divider">
-                <section class="filter-section">
+                <hr class="filter-divider" data-filter-key="title" hidden>
+                <section class="filter-section" data-filter-key="profitability">
                     <h3 class="filter-heading">Profitability</h3>
+                    <label class="filter-toggle" for="filterExcludeNegativeProfit">
+                        <input type="checkbox" id="filterExcludeNegativeProfit">
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide negative net profit</span>
+                    </label>
+                    <label class="filter-toggle" for="filterExcludeEndedAuctions">
+                        <input type="checkbox" id="filterExcludeEndedAuctions" checked>
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide ended auctions</span>
+                    </label>
+                    <label class="filter-toggle" for="filterExcludeUnknownPrice">
+                        <input type="checkbox" id="filterExcludeUnknownPrice">
+                        <span class="filter-toggle-ui" aria-hidden="true"></span>
+                        <span class="filter-toggle-label">Hide listings without price</span>
+                    </label>
                     <div class="input-group"><label for="filterMinRoi">Min ROI %</label><input type="number" id="filterMinRoi" placeholder="Any" step="0.1" min="0"></div>
                     <div class="input-group"><label for="filterMinProfit">Min net profit ($)</label><input type="number" id="filterMinProfit" placeholder="Any" step="100"></div>
                 </section>
@@ -224,6 +262,21 @@
         </div>
     </div>
 
-    <script src="script.js?v=20260520b"></script>
+    <div id="confirmModal" class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle" hidden>
+        <div class="modal-box confirm-modal-box">
+            <h2 id="confirmModalTitle" class="confirm-modal-title"></h2>
+            <p id="confirmModalMessage" class="confirm-modal-message"></p>
+            <div class="confirm-modal-actions">
+                <button type="button" class="confirm-modal-btn confirm-modal-btn--cancel" id="confirmModalCancelBtn">Cancel</button>
+                <button type="button" class="confirm-modal-btn confirm-modal-btn--confirm" id="confirmModalConfirmBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="appToastStack" class="app-toast-stack" aria-live="polite" aria-relevant="additions"></div>
+
+    <script src="/js/app-shell.js?v=20260609"></script>
+    <script src="/js/listing-shared.js?v=20260610"></script>
+    <script src="/js/script.js?v=20260609"></script>
 </body>
 </html>

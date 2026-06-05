@@ -8,7 +8,7 @@ from urllib.parse import quote, urlencode
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import ensure_dev_bypass_user
@@ -23,10 +23,15 @@ from app.config import (
 from app.db import get_db
 from app.repositories.users import get_user_by_id, upsert_user_by_oid
 from app.services.microsoft_oidc import (
+    GRAPH_LOGIN_SCOPES,
     decode_and_validate_id_token,
     exchange_code_for_tokens,
+    pick_display_name,
     pick_email_claim,
+    resolve_profile_picture_url,
 )
+from app.services.profile_photo import load_profile_photo_bytes
+from app.services.user_profile import user_profile_payload
 
 router = APIRouter(tags=["auth"])
 
@@ -71,7 +76,7 @@ def login(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "response_mode": "query",
-        "scope": "openid profile email",
+        "scope": GRAPH_LOGIN_SCOPES,
         "state": state,
     }
     url = _authorize_base_url(tenant_id) + "?" + urlencode(params)
@@ -137,7 +142,13 @@ def auth_callback(
         if not _email_domain_allowed(email, allowed_domain):
             return RedirectResponse(url=_login_redirect_url("email_not_allowed"), status_code=302)
 
-        user = upsert_user_by_oid(db, azure_oid=str(sub), email=email)
+        user = upsert_user_by_oid(
+            db,
+            azure_oid=str(sub),
+            email=email,
+            display_name=pick_display_name(claims),
+            profile_picture_url=resolve_profile_picture_url(claims, tokens),
+        )
         request.session["user_id"] = user.id
         request.session["email"] = user.email
 
@@ -152,18 +163,35 @@ def logout(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/login.html", status_code=302)
 
 
+@router.get("/auth/avatar")
+def auth_avatar(request: Request, db: Session = Depends(get_db)):
+    uid = request.session.get("user_id")
+    if uid is None:
+        raise HTTPException(status_code=401, detail="not_authenticated")
+    user = get_user_by_id(db, int(uid))
+    if user is None:
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="not_authenticated")
+    loaded = load_profile_photo_bytes(user.profile_picture_url)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="avatar_not_available")
+    body, media_type = loaded
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
 @router.get("/auth/me")
 def auth_me(request: Request, db: Session = Depends(get_db)):
     if is_dev_auth_bypass_enabled():
         user = ensure_dev_bypass_user(db)
         request.session["user_id"] = user.id
         request.session["email"] = user.email
-        return {
-            "authenticated": True,
-            "email": user.email,
-            "user_id": user.id,
-            "dev_bypass": True,
-        }
+        payload = user_profile_payload(user, db)
+        payload["dev_bypass"] = True
+        return payload
 
     uid = request.session.get("user_id")
     if uid is None:
@@ -172,8 +200,4 @@ def auth_me(request: Request, db: Session = Depends(get_db)):
     if user is None:
         request.session.clear()
         raise HTTPException(status_code=401, detail="not_authenticated")
-    return {
-        "authenticated": True,
-        "email": user.email,
-        "user_id": user.id,
-    }
+    return user_profile_payload(user, db)

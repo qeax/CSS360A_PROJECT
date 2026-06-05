@@ -13,7 +13,7 @@ from app.integrations.ebay.get_item_mapping import (
     SELLER_JSON_KEYS,
 )
 
-_YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
+_YEAR_RE = re.compile(r"\b(19[0-9]\d|20[0-3]\d)\b")
 _MILEAGE_WITH_UNIT_RE = re.compile(
     r"([\d,]+)\s*(?:,\d{3})*\s*(?:mi|miles|mile)\b",
     re.IGNORECASE,
@@ -62,6 +62,8 @@ def _aspect_value_map(localized_aspects: Any) -> dict[str, str]:
             continue
         vals = entry.get("localizedAspectValues") or entry.get("values")
         picked = _first_str(vals)
+        if not picked:
+            picked = _first_str(entry.get("value"))
         if picked:
             out[name.strip().lower()] = picked
     return out
@@ -125,6 +127,177 @@ def _parse_year_from_title(title: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
+def _coerce_listing_year(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        y = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        m = _YEAR_RE.search(text)
+        if not m:
+            return None
+        y = int(m.group(1))
+    else:
+        try:
+            y = int(value)
+        except (TypeError, ValueError):
+            return None
+    if 1900 <= y <= 2039:
+        return y
+    return None
+
+
+def resolve_listing_year(
+    title: str | None,
+    *,
+    year_hint: Any = None,
+    aspects: Any = None,
+) -> Optional[int]:
+    """Best-effort model year; returns None instead of a placeholder when unknown."""
+    amap = _aspect_value_map(aspects) if aspects else {}
+    year_raw = _pick_aspect(amap, ("year",))
+    y = _coerce_listing_year(year_raw)
+    if y is not None:
+        return y
+    y = _coerce_listing_year(year_hint)
+    if y is not None:
+        return y
+    t = (title or "").strip()
+    if not t:
+        return None
+    parts = t.split()
+    if parts and _YEAR_RE.match(parts[0]):
+        return int(parts[0])
+    years = [int(m.group(1)) for m in _YEAR_RE.finditer(t)]
+    years = [yr for yr in years if 1900 <= yr <= 2039]
+    if not years:
+        return None
+    return min(years)
+
+
+def resolve_vehicle_facets(
+    title: str | None,
+    *,
+    brand_hint: Any = None,
+    model_hint: Any = None,
+    year_hint: Any = None,
+    aspects: Any = None,
+) -> dict[str, Optional[str]]:
+    """
+    Normalize brand, model, year from aspects and title.
+
+    eBay sometimes puts the model year in the Make aspect; relocate to year.
+    """
+    from app.integrations.ebay.inventory import _parse_brand_model
+
+    year_from_brand_hint: Optional[int] = None
+    if brand_hint is not None:
+        yb = _coerce_listing_year(brand_hint)
+        if yb is not None:
+            year_from_brand_hint = yb
+            brand_hint = None
+
+    amap = _aspect_value_map(aspects) if aspects else {}
+    make_raw = _pick_aspect(amap, ("make",))
+    model_raw = _pick_aspect(amap, ("model",))
+
+    year = resolve_listing_year(
+        title,
+        year_hint=year_hint if year_hint is not None else year_from_brand_hint,
+        aspects=aspects,
+    )
+
+    brand: Optional[str] = None
+    if make_raw and not _coerce_listing_year(make_raw):
+        brand = make_raw.strip()
+
+    model: Optional[str] = None
+    if model_raw and not _coerce_listing_year(model_raw):
+        model = model_raw.strip()
+
+    year_from_make = _coerce_listing_year(make_raw) if make_raw else None
+    if year_from_make is not None:
+        year = year or year_from_make
+        brand = None
+
+    year_from_model = _coerce_listing_year(model_raw) if model_raw else None
+    if year_from_model is not None:
+        year = year or year_from_model
+        model = None
+
+    if brand_hint and not _coerce_listing_year(str(brand_hint)):
+        hint = str(brand_hint).strip()
+        if not brand:
+            brand = hint
+
+    if model_hint and not _coerce_listing_year(str(model_hint)):
+        hint = str(model_hint).strip()
+        if not model:
+            model = hint
+
+    if not brand or not model:
+        pb, pm = _parse_brand_model(title or "", brand, model)
+        if not brand:
+            brand = pb
+        if not model:
+            model = pm
+
+    if brand and _coerce_listing_year(brand):
+        year = year or _coerce_listing_year(brand)
+        brand = None
+        if not model:
+            _, pm = _parse_brand_model(title or "", None, None)
+            model = pm
+
+    return {
+        "brand": (brand or "Unknown")[:100],
+        "model": (model or "Listing")[:100],
+        "year": year,
+    }
+
+
+def _parse_mileage_from_aspect_raw(raw: Optional[str]) -> Optional[int]:
+    """Trust explicit Mileage aspect (allows low odometer, e.g. collector cars)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    text = raw.strip().replace(",", "")
+    if text.isdigit():
+        value = int(text)
+        if 1980 <= value <= 2039:
+            return None
+        if 0 <= value <= MAX_PLAUSIBLE_ODOMETER_MI:
+            return value
+    return _parse_mileage(raw)
+
+
+def resolve_listing_mileage(
+    title: str | None,
+    *,
+    mileage_hint: Any = None,
+    aspects: Any = None,
+) -> int | None:
+    """Best-effort odometer (mi) from hint, aspects, or title."""
+    if mileage_hint is not None:
+        if isinstance(mileage_hint, int) and is_plausible_odometer(mileage_hint):
+            return mileage_hint
+        parsed_hint = _parse_mileage(str(mileage_hint))
+        if parsed_hint is not None:
+            return parsed_hint
+    amap = _aspect_value_map(aspects) if aspects else {}
+    aspect_raw = _pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES))
+    if aspect_raw:
+        from_aspect = _parse_mileage_from_aspect_raw(aspect_raw)
+        if from_aspect is not None:
+            return from_aspect
+    from_aspects = _parse_mileage(aspect_raw)
+    if from_aspects is not None:
+        return from_aspects
+    return _parse_mileage(title)
+
+
 def _normalize_listing_format_from_options(options: Any) -> str:
     if not isinstance(options, list) or not options:
         return "BUY_IT_NOW"
@@ -155,9 +328,9 @@ def _parse_item_location(item: dict[str, Any]) -> dict[str, Optional[str]]:
     if postal and len(postal) > 2:
         postal_masked = postal[:2] + "**"
     return {
-        "country": country or "United States",
-        "region": region or "",
-        "city": city or "",
+        "country": country,
+        "region": region,
+        "city": city,
         "postal_code_masked": postal_masked,
     }
 
@@ -215,18 +388,15 @@ def parse_get_item(item: dict[str, Any]) -> dict[str, Any]:
     aspects_raw = item.get("localizedAspects") or []
     amap = _aspect_value_map(aspects_raw)
 
-    brand = _pick_aspect(amap, ("make",))
-    model = _pick_aspect(amap, ("model",))
-    year_raw = _pick_aspect(amap, ("year",))
-    year = None
-    if year_raw:
-        ym = _YEAR_RE.search(year_raw)
-        if ym:
-            year = int(ym.group(1))
-    if year is None:
-        year = _parse_year_from_title(title)
+    facets = resolve_vehicle_facets(
+        title,
+        aspects=aspects_raw,
+    )
+    brand = facets["brand"]
+    model = facets["model"]
+    year = facets["year"]
 
-    mileage = _parse_mileage(_pick_aspect(amap, tuple(_MILEAGE_ASPECT_NAMES)))
+    mileage = resolve_listing_mileage(title, aspects=aspects_raw)
     vehicle_title = _pick_aspect(amap, tuple(_VEHICLE_TITLE_ASPECT_NAMES))
 
     cond = item.get("condition") or item.get("conditionDisplayName")
@@ -278,6 +448,7 @@ def parse_get_item(item: dict[str, Any]) -> dict[str, Any]:
         "bid_count": item.get("bidCount"),
         "listing_ends_at": _parse_listing_end(item.get("itemEndDate")),
         "description_summary": _first_str(item.get("shortDescription")) or title[:512],
+        "description_full": _first_str(item.get("description")),
         "aspects_json": aspects_raw,
         "source": "ebay",
     }

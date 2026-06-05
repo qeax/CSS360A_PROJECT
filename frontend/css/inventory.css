@@ -89,15 +89,35 @@
     height: 100%;
 }
 
+.car-card-carousel-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.car-card-carousel-strip {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+}
+
+.car-card-carousel-strip.is-anim-right {
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.car-card-carousel-strip.is-anim-left {
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .car-card-carousel-img {
+    flex: 0 0 100%;
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-}
-
-.car-card-carousel-img[hidden] {
-    display: none;
+    user-select: none;
 }
 
 .car-card-carousel-nav {
@@ -203,13 +223,15 @@ article.car-card:focus-within .car-card-carousel-dots {
 }
 
 .car-card-carousel-dots {
+    --carousel-dot-size: 6px;
+    --carousel-dot-gap: 6px;
+    --carousel-dot-slot: 18px;
+    --carousel-dots-visible: 7;
+
     position: absolute;
     bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 6px;
     padding: 5px 8px;
     border-radius: 999px;
     background: rgba(12, 14, 18, 0.42);
@@ -218,25 +240,95 @@ article.car-card:focus-within .car-card-carousel-dots {
     z-index: 2;
 }
 
-.car-card-carousel-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    border: none;
-    padding: 0;
-    background: rgba(255, 255, 255, 0.45);
-    cursor: pointer;
-    transition: background 0.2s, transform 0.2s, width 0.2s, border-radius 0.2s;
+/* Fits 7 dots with one active pointer at 18px (6×6px + 6 gaps + 18px slot) */
+.car-card-carousel-dots-viewport {
+    position: relative;
+    width: calc(
+        (var(--carousel-dots-visible) - 1) * (var(--carousel-dot-size) + var(--carousel-dot-gap)) +
+            var(--carousel-dot-slot)
+    );
+    overflow: hidden;
 }
 
-.car-card-carousel-dot:hover {
+.car-card-carousel-dots-track {
+    display: flex;
+    align-items: center;
+    gap: var(--carousel-dot-gap);
+    transition: transform 0.25s ease;
+}
+
+.car-card-carousel-dots-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: var(--carousel-dot-size);
+    border-radius: 999px;
+    background: #fff;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Middle: strip slides; 3 equal slots each side of center pointer */
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dots-center {
+    display: none;
+}
+
+/* Same pitch as edge: active dot grows to 18px and flex pushes neighbors apart */
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot {
+    flex: 0 0 auto;
+    width: var(--carousel-dot-size);
+    height: var(--carousel-dot-size);
+    background: rgba(255, 255, 255, 0.45);
+    transition: background 0.2s, width 0.25s ease, border-radius 0.2s ease, opacity 0.2s;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot:hover {
     background: rgba(255, 255, 255, 0.7);
 }
 
-.car-card-carousel-dot[aria-current="true"] {
-    width: 18px;
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot.is-window-edge {
+    opacity: 0.45;
+}
+
+.car-card-carousel-dots.is-carousel-slide .car-card-carousel-dot[aria-current="true"] {
+    width: var(--carousel-dot-slot);
     border-radius: 999px;
     background: #fff;
+    opacity: 1;
+}
+
+.car-card-carousel-dot {
+    flex-shrink: 0;
+    width: var(--carousel-dot-size);
+    height: var(--carousel-dot-size);
+    border-radius: 50%;
+    border: none;
+    padding: 0;
+    box-sizing: content-box;
+    background: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+}
+
+.car-card-carousel-dots:not(.is-carousel-slide) .car-card-carousel-dot:hover {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.car-card-carousel-dot.is-window-edge {
+    opacity: 0.45;
+}
+
+/* Start/end: strip fixed, active dot is the moving pointer */
+.car-card-carousel-dots.is-carousel-edge .car-card-carousel-dot[aria-current="true"] {
+    width: 18px;
+    height: var(--carousel-dot-size);
+    border-radius: 999px;
+    background: #fff;
+    transition: background 0.2s, width 0.2s ease, border-radius 0.2s ease;
 }
 
 .car-card-carousel-dot:focus-visible {
@@ -266,7 +358,7 @@ article.car-card:focus-within .car-card-carousel-dots {
 
 .car-card-title-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     margin-bottom: 8px;
 }
@@ -389,6 +481,10 @@ article.car-card:focus-within .car-card-carousel-dots {
     padding-bottom: 2px;
 }
 
+.car-card-footer:not(:has(.car-card-metrics-compact)) .car-card-footer-start {
+    flex: 1 1 100%;
+}
+
 .car-card-footer-start {
     display: flex;
     flex-direction: column;
@@ -420,6 +516,67 @@ article.car-card:focus-within .car-card-carousel-dots {
     line-height: 1.3;
     font-variant-numeric: tabular-nums;
     color: var(--text-main);
+}
+
+.car-card-price-unknown {
+    display: inline-block;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 7px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.car-card-price-unknown--modal {
+    font-size: 20px;
+}
+
+.car-card-metrics-compact--unknown {
+    justify-content: center;
+    align-items: center;
+    padding: 10px 14px;
+    max-width: none;
+}
+
+.car-card-metrics-unknown-msg {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: center;
+    color: var(--text-muted);
+    letter-spacing: -0.01em;
+}
+
+.car-card-auction-ended-pill {
+    display: inline-block;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 7px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
+}
+
+.car-card-auction-ended-pill--modal {
+    font-size: 20px;
+}
+
+.car-card-auction-countdown {
+    font-size: 1.06rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
 }
 
 .car-card-price-sep {
@@ -468,7 +625,7 @@ article.car-card:focus-within .car-card-carousel-dots {
 .car-card-metrics-col--roi {
     flex: 0 0 auto;
     width: max-content;
-    max-width: 5.5rem;
+    max-width: 8.5rem;
     padding-right: 2px;
 }
 
@@ -492,6 +649,51 @@ article.car-card:focus-within .car-card-carousel-dots {
     text-transform: uppercase;
     color: var(--text-muted);
     line-height: 1.2;
+}
+
+.car-card-metrics-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 2px;
+    max-width: 100%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: var(--text-muted);
+    line-height: 1.25;
+}
+
+.car-card-metrics-meta-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+    opacity: 0.55;
+}
+
+.car-card-metrics-meta-dot--high {
+    background: var(--accent-green);
+    opacity: 0.95;
+}
+
+.car-card-metrics-meta-dot--medium {
+    background: #d97706;
+    opacity: 0.9;
+}
+
+.car-card-metrics-meta-dot--low {
+    background: var(--text-muted);
+    opacity: 0.65;
+}
+
+.car-card-metrics-meta-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .car-card-metrics-col-value {
@@ -532,6 +734,36 @@ body.light-theme .car-card-metrics-col-value--roi {
     text-align: center;
     padding: 40px 16px;
     color: var(--text-muted);
+}
+
+.loading--sync {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.loading-spinner {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: inventory-loading-spin 0.75s linear infinite;
+}
+
+@keyframes inventory-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.inventory-list--grid > .loading,
+.inventory-list--grid > .no-results {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: 100%;
 }
 
 .modal-header-title {

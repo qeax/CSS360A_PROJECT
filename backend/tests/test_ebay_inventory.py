@@ -217,7 +217,7 @@ def test_apply_filters_handles_ebay_string_listing_ends_at():
         condition="Used",
         vehicle_title="Clean",
         listing_format="BUY_IT_NOW",
-        listing_ends_at="2026-06-01T00:00:00+00:00",
+        listing_ends_at="2027-06-01T00:00:00+00:00",
         listing_terms=SimpleNamespace(ship_to_home=True, local_pickup=False, in_store_pickup=False),
         location=SimpleNamespace(
             country="United States",
@@ -265,4 +265,4 @@ def test_apply_filters_handles_ebay_string_listing_ends_at():
         vehicle_titles=None,
     )
     assert len(out) == 1
-    assert out[0]["listing_ends_at"] == "2026-06-01T00:00:00+00:00"
+    assert out[0]["listing_ends_at"] == "2027-06-01T00:00:00+00:00"

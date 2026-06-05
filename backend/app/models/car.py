@@ -1,4 +1,17 @@
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -6,12 +19,20 @@ from app.db import Base
 
 class Car(Base):
     __tablename__ = "cars"
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "external_listing_id",
+            name="uq_cars_source_external_listing_id",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     brand = Column(String(100), nullable=False, index=True)
     model = Column(String(100), nullable=False, index=True)
-    year = Column(Integer, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)
     price = Column(Float, nullable=False, index=True)
+    price_known = Column(Boolean, nullable=False, server_default=text("1"))
     repair_cost = Column(Float, nullable=False, default=0)
     resale_value = Column(Float, nullable=False)
     mileage = Column(Integer, nullable=True)
@@ -31,12 +52,19 @@ class Car(Base):
         index=True,
     )
     listing_ends_at = Column(DateTime(timezone=True), nullable=True)
+    auction_ended_at = Column(DateTime(timezone=True), nullable=True)
+    ingest_search_key = Column(String(128), nullable=True, index=True)
     bid_count = Column(Integer, nullable=True)
     listing_format = Column(String(50), nullable=True)
     description_summary = Column(String(1024), nullable=True)
     description_full = Column(Text, nullable=True)
     api_synced_at = Column(DateTime(timezone=True), nullable=True)
     seller_item_revision = Column(String(64), nullable=True)
+    resale_method = Column(String(32), nullable=True)
+    resale_confidence = Column(Float, nullable=True)
+    resale_comp_count = Column(Integer, nullable=True)
+    resale_segment_key = Column(String(160), nullable=True)
+    resale_estimated_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -72,6 +100,16 @@ class Car(Base):
     )
     history_reports = relationship(
         "VehicleHistoryReport",
+        back_populates="car",
+        cascade="all, delete-orphan",
+    )
+    watchlist_items = relationship(
+        "UserWatchlistItem",
+        back_populates="car",
+        cascade="all, delete-orphan",
+    )
+    search_queries = relationship(
+        "CarSearchQuery",
         back_populates="car",
         cascade="all, delete-orphan",
     )

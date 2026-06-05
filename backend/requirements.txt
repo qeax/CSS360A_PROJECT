@@ -1,3 +1,4 @@
+bleach[css]>=6.0
 fastapi
 uvicorn
 pymysql

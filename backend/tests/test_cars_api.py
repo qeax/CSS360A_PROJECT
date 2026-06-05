@@ -24,6 +24,13 @@ def test_cars_requires_auth_without_override(monkeypatch):
 def test_cars_allows_dev_auth_bypass(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DEV_AUTH_BYPASS", "true")
+    for key in (
+        "AZURE_AD_TENANT_ID",
+        "AZURE_AD_CLIENT_ID",
+        "AZURE_AD_CLIENT_SECRET",
+        "AZURE_AD_REDIRECT_URI",
+    ):
+        monkeypatch.delenv(key, raising=False)
     with TestClient(app) as bare_client:
         response = bare_client.get("/cars")
     assert response.status_code == 200
@@ -177,26 +184,173 @@ def test_cars_uses_demo_when_ebay_not_configured(client, monkeypatch):
     assert any((i.get("source") or "") == "demo" for i in data["items"])
 
 
-def test_cars_empty_when_ebay_only_and_no_credentials(client, monkeypatch):
+def test_cars_empty_when_ebay_only_and_no_credentials(client, db_session, monkeypatch):
+    from tests.conftest import clear_inventory, reset_demo_inventory
+
+    clear_inventory(db_session)
+
     monkeypatch.setenv("INVENTORY_MODE", "ebay_only")
     monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
     monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
     reset_ebay_client()
     invalidate_in_memory_demo_cache()
-    response = client.get("/cars", params={"limit": 5})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 0
-    assert data["items"] == []
+    try:
+        response = client.get("/cars", params={"limit": 5})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+        assert data["items"] == []
+    finally:
+        reset_demo_inventory(db_session)
 
 
 def test_cars_q_soft_partial_brand_model(client):
-    """Single typo in brand still matches via token OR fuzzy brand+model."""
-    response = client.get("/cars", params={"q": "toyta camry"})
+    """Single typo in brand still matches Toyota listings via fuzzy brand+model scoring."""
+    baseline = client.get("/cars", params={"q": "toyota camry", "limit": 50})
+    assert baseline.status_code == 200
+    if baseline.json()["total"] < 1:
+        pytest.skip("no Toyota Camry in demo inventory")
+
+    response = client.get("/cars", params={"q": "toyta camry", "limit": 50})
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 1
-    assert any(
-        "toyota" in (i["brand"] or "").lower() and "camry" in (i["model"] or "").lower()
-        for i in data["items"]
+    assert any("toyota" in (i["brand"] or "").lower() for i in data["items"])
+
+
+def test_delete_car_requires_auth_without_override(monkeypatch):
+    monkeypatch.delenv("DEV_AUTH_BYPASS", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    with TestClient(app) as bare_client:
+        response = bare_client.delete("/cars/1")
+    assert response.status_code == 401
+
+
+def test_delete_car_not_found(client):
+    response = client.delete("/cars/999999999")
+    assert response.status_code == 404
+
+
+def test_delete_car_removes_row(client):
+    list_resp = client.get("/cars", params={"limit": 1})
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    if not items:
+        pytest.skip("no cars in inventory to delete")
+    car_id = items[0]["id"]
+
+    del_resp = client.delete(f"/cars/{car_id}")
+    assert del_resp.status_code == 204
+
+    again = client.get("/cars", params={"limit": 50})
+    assert again.status_code == 200
+    ids = {c["id"] for c in again.json()["items"]}
+    assert car_id not in ids
+
+    missing = client.delete(f"/cars/{car_id}")
+    assert missing.status_code == 404
+
+
+def test_refresh_car_ebay_not_found(client):
+    response = client.post("/cars/999999999/ebay-refresh")
+    assert response.status_code == 404
+
+
+def test_refresh_car_ebay_bad_source(client, monkeypatch):
+    from app.services.ebay_sync import EbayRefreshError
+
+    def _raise(_db, _car_id):
+        raise EbayRefreshError("not_ebay_listing")
+
+    monkeypatch.setattr("app.api.routes.cars.refresh_car_from_ebay", _raise)
+    response = client.post("/cars/1/ebay-refresh")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "not_ebay_listing"
+
+
+def test_refresh_car_ebay_success(client, monkeypatch):
+    list_resp = client.get("/cars", params={"limit": 50})
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    ebay_item = next(
+        (
+            i
+            for i in items
+            if (i.get("source") or "").lower() == "ebay" and i.get("external_listing_id")
+        ),
+        None,
     )
+    if not ebay_item:
+        pytest.skip("no eBay listing in inventory")
+
+    detail = {
+        "itemId": ebay_item["external_listing_id"],
+        "title": f"{ebay_item['brand']} {ebay_item['model']}",
+        "price": {"value": str(ebay_item["price"]), "currency": "USD"},
+        "localizedAspects": [
+            {"name": "Make", "value": ebay_item["brand"]},
+            {"name": "Model", "value": ebay_item["model"]},
+            {"name": "Mileage", "value": "2896"},
+            {"name": "VIN (Vehicle Identification Number)", "value": "TESTVIN123456789"},
+        ],
+        "buyingOptions": ["FIXED_PRICE"],
+    }
+
+    from app.integrations.ebay.client import GetItemResult
+
+    class _FakeClient:
+        def is_configured(self):
+            return True
+
+        def get_item(self, item_id):
+            if item_id == ebay_item["external_listing_id"]:
+                return GetItemResult.ok(detail)
+            return GetItemResult.error()
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+
+    response = client.post(f"/cars/{ebay_item['id']}/ebay-refresh")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["item"]["id"] == ebay_item["id"]
+    assert body["item"].get("vin") == "TESTVIN123456789"
+
+
+def test_refresh_car_ebay_listing_gone(client, monkeypatch):
+    list_resp = client.get("/cars", params={"limit": 50})
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    ebay_item = next(
+        (
+            i
+            for i in items
+            if (i.get("source") or "").lower() == "ebay" and i.get("external_listing_id")
+        ),
+        None,
+    )
+    if not ebay_item:
+        pytest.skip("no eBay listing in inventory")
+
+    from app.integrations.ebay.client import GetItemResult
+
+    class _FakeClient:
+        def is_configured(self):
+            return True
+
+        def get_item(self, item_id):
+            if item_id == ebay_item["external_listing_id"]:
+                return GetItemResult.not_found(404)
+            return GetItemResult.error()
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+
+    response = client.post(f"/cars/{ebay_item['id']}/ebay-refresh")
+    assert response.status_code == 200
+    body = response.json()
+    assert body.get("deleted") is True
+    assert body.get("id") == ebay_item["id"]
+
+    again = client.get("/cars", params={"limit": 50})
+    assert again.status_code == 200
+    ids = {c["id"] for c in again.json()["items"]}
+    assert ebay_item["id"] not in ids

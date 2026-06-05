@@ -1,4 +1,4 @@
-"""In-memory eBay listings for the main inventory API (never persisted to DB)."""
+"""eBay listing fetch and in-memory views (debug / legacy; production uses ebay_sync → DB)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from app.integrations.ebay.client import (
     ebay_fetch_cap,
     get_ebay_client,
 )
-from app.integrations.ebay.parse_item import _parse_mileage, is_plausible_odometer
 from app.integrations.ebay.vehicle_filter import is_likely_vehicle_listing
 from app.services.flip import estimate_flip_from_listing
 
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL_SEC = 300
 _ebay_cache: dict[str, tuple[float, list[Any]]] = {}
 
-_YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
+_YEAR_RE = re.compile(r"\b(19[0-9]\d|20[0-3]\d)\b")
 
 
 def invalidate_ebay_inventory_cache() -> None:
@@ -100,35 +99,32 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     title = (item.get("title") or "").strip()
     if not title:
         return None
-    try:
-        price = float(item.get("price") or 0)
-    except (TypeError, ValueError):
-        price = 0.0
-    if price <= 0:
-        price = 1.0
+    from app.integrations.ebay.price import parse_listing_price
 
-    brand, model = _parse_brand_model(title, item.get("brand"), item.get("model"))
-    year = _parse_year(title, item.get("year"))
+    price, price_known = parse_listing_price(item.get("price"))
+
+    from app.integrations.ebay.parse_item import resolve_vehicle_facets
+
+    facets = resolve_vehicle_facets(
+        title,
+        brand_hint=item.get("brand"),
+        model_hint=item.get("model"),
+        year_hint=item.get("year"),
+        aspects=item.get("aspects_json"),
+    )
+    brand = facets["brand"] or "Unknown"
+    model = facets["model"] or "Listing"
+    year = facets["year"]
     ext_id = (item.get("external_listing_id") or f"ebay-{index}").strip()
+    year_econ = year
 
-    year_econ: int | None = None
-    if item.get("year") is not None:
-        try:
-            year_econ = int(item.get("year"))
-        except (TypeError, ValueError):
-            year_econ = None
+    from app.integrations.ebay.parse_item import resolve_listing_mileage
 
-    mileage_for_flip: int | None = None
-    mileage_raw = item.get("mileage")
-    if mileage_raw is not None:
-        try:
-            candidate = int(mileage_raw)
-            if is_plausible_odometer(candidate):
-                mileage_for_flip = candidate
-        except (TypeError, ValueError):
-            mileage_for_flip = None
-    if mileage_for_flip is None:
-        mileage_for_flip = _parse_mileage(title)
+    mileage_for_flip = resolve_listing_mileage(
+        title,
+        mileage_hint=item.get("mileage"),
+        aspects=item.get("aspects_json"),
+    )
 
     cond_raw = item.get("condition")
     condition_econ = (str(cond_raw).strip() if cond_raw is not None else None) or None
@@ -137,16 +133,19 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
     display_condition = condition_econ or "Used"
     display_vehicle_title = vehicle_title_econ or "Not Specified"
 
-    repair, resale = estimate_flip_from_listing(
-        price,
-        year=year_econ,
-        mileage=mileage_for_flip,
-        condition=condition_econ,
-        vehicle_title=vehicle_title_econ,
-        listing_format=item.get("listing_format") or "BUY_IT_NOW",
-        listing_id=ext_id,
-        title_text=title,
-    )
+    if price_known:
+        repair, resale = estimate_flip_from_listing(
+            price,
+            year=year_econ,
+            mileage=mileage_for_flip,
+            condition=condition_econ,
+            vehicle_title=vehicle_title_econ,
+            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            listing_id=ext_id,
+            title_text=title,
+        )
+    else:
+        repair, resale = 0.0, 0.0
     client = get_ebay_client()
     listing_url = resolve_listing_url(
         ext_id,
@@ -156,8 +155,9 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
 
     loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
     city = (loc_in.get("city") or item.get("location_city") or "").strip() or "—"
+    country = (loc_in.get("country") or "").strip() or None
     loc = SimpleNamespace(
-        country=loc_in.get("country") or "United States",
+        country=country,
         region=loc_in.get("region") or "",
         city=city,
         postal_code_masked=loc_in.get("postal_code_masked"),
@@ -204,6 +204,7 @@ def ebay_listing_dict_to_car_view(item: dict[str, Any], index: int) -> SimpleNam
         model=model,
         year=year,
         price=price,
+        price_known=price_known,
         repair_cost=repair,
         resale_value=resale,
         mileage=mileage_for_flip,

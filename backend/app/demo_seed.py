@@ -196,7 +196,10 @@ def iter_demo_specs(n: int, rng: random.Random) -> Iterator[dict[str, Any]]:
         listing_ends_at = None
         if fmt == "AUCTION":
             bid_count = rng.randint(1, 24)
-            listing_ends_at = _DEMO_AUCTION_BASE + timedelta(hours=rng.randint(2, 72))
+            if i % 12 == 0:
+                listing_ends_at = datetime.now(timezone.utc) - timedelta(hours=rng.randint(1, 48))
+            else:
+                listing_ends_at = _DEMO_AUCTION_BASE + timedelta(hours=rng.randint(2, 72))
 
         econ = estimate_flip_economics(
             price,

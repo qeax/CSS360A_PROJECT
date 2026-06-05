@@ -44,9 +44,26 @@ def get_auth_session_secret() -> Optional[str]:
     return os.getenv("AUTH_SESSION_SECRET")
 
 
+def is_azure_ad_configured() -> bool:
+    """True when all Entra OIDC settings required for real sign-in are present."""
+    return bool(
+        get_azure_ad_tenant_id()
+        and get_azure_ad_client_id()
+        and get_azure_ad_client_secret()
+        and get_azure_ad_redirect_uri()
+    )
+
+
 def is_dev_auth_bypass_enabled() -> bool:
-    """Local-only fake login when Microsoft Entra is not configured. Never active in production."""
+    """
+    Local-only fake login when Entra is not configured and DEV_AUTH_BYPASS is on.
+
+    If AZURE_AD_* variables are set, real Microsoft sign-in is used even in development.
+    Never active in production.
+    """
     if is_production():
+        return False
+    if is_azure_ad_configured():
         return False
     flag = os.getenv("DEV_AUTH_BYPASS", "").strip().lower()
     return flag in ("1", "true", "yes", "on")
