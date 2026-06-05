@@ -63,33 +63,42 @@ def _raw_listing_dict(car: Any) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def _listing_description_full(car: Any) -> str | None:
-    """Full HTML/text description from DB column or raw eBay payload."""
-    stored = getattr(car, "description_full", None)
-    if isinstance(stored, str) and stored.strip():
-        return stored.strip()
-    raw = _raw_listing_dict(car)
-    if not raw:
-        return None
+def _description_from_raw_listing(raw: dict[str, Any]) -> str | None:
     for key in ("description", "Description"):
         val = raw.get(key)
         if isinstance(val, str) and val.strip():
             return val.strip()
-    try:
-        aspects_json = _latest_aspects_json(car)
-        if not aspects_json:
-            aspects_json = raw.get("localizedAspects") or raw.get("aspects_json")
-        from app.services.vehicle_aspects import extract_aspect_value
-
-        aspect_desc = extract_aspect_value(
-            aspects_json,
-            ("description", "item description", "seller's item description"),
-        )
-        if aspect_desc:
-            return aspect_desc
-    except Exception:
-        pass
     return None
+
+
+def _listing_description_full(car: Any) -> str | None:
+    """Full HTML/text description — prefer the longest available source."""
+    candidates: list[str] = []
+    stored = getattr(car, "description_full", None)
+    if isinstance(stored, str) and stored.strip():
+        candidates.append(stored.strip())
+    raw = _raw_listing_dict(car)
+    if raw:
+        raw_desc = _description_from_raw_listing(raw)
+        if raw_desc:
+            candidates.append(raw_desc)
+        try:
+            aspects_json = _latest_aspects_json(car)
+            if not aspects_json:
+                aspects_json = raw.get("localizedAspects") or raw.get("aspects_json")
+            from app.services.vehicle_aspects import extract_aspect_value
+
+            aspect_desc = extract_aspect_value(
+                aspects_json,
+                ("description", "item description", "seller's item description"),
+            )
+            if aspect_desc:
+                candidates.append(aspect_desc)
+        except Exception:
+            pass
+    if not candidates:
+        return None
+    return max(candidates, key=len)
 
 
 def _listing_title(car: Any) -> str:
@@ -249,6 +258,7 @@ def load_inventory_cars_from_db(db: Session, *, search_key: str | None = None) -
             joinedload(Car.listing_terms),
             selectinload(Car.media),
             selectinload(Car.aspect_snapshots),
+            selectinload(Car.search_queries),
         )
         .order_by(Car.id)
     )
@@ -275,6 +285,7 @@ def load_car_by_id(db: Session, car_id: int) -> Car | None:
             joinedload(Car.listing_terms),
             selectinload(Car.media),
             selectinload(Car.aspect_snapshots),
+            selectinload(Car.search_queries),
         )
     ).scalar_one_or_none()
 
@@ -329,6 +340,7 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
         getattr(car, "listing_url", None),
         sandbox=ebay_sandbox,
     )
+    listing_title = _listing_title(car)
     return {
         "id": car.id,
         "brand": disp_brand,
@@ -360,6 +372,12 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
         "bid_count": car.bid_count,
         "listing_format": _normalize_listing_format(car.listing_format) or car.listing_format,
         "description_summary": getattr(car, "description_summary", None),
+        "listing_title": listing_title or None,
+        "resale_method": getattr(car, "resale_method", None),
+        "resale_confidence": getattr(car, "resale_confidence", None),
+        "resale_comp_count": getattr(car, "resale_comp_count", None),
+        "resale_segment_key": getattr(car, "resale_segment_key", None),
+        "resale_estimated_at": _listing_ends_at_iso(getattr(car, "resale_estimated_at", None)),
         "seller_username": seller_username,
         "location": location_out,
         "delivery": delivery,
@@ -376,13 +394,12 @@ def car_to_detail_api_item(
 ) -> dict[str, Any] | None:
     """Extended car payload for the detail page."""
     from app.services.geocode import ensure_car_location_coords
-    from app.services.html_sanitize import sanitize_listing_html
     from app.services.watchlist import is_car_watched
 
     item = car_to_api_item(car)
     if item is None:
         return None
-    item["description_html"] = sanitize_listing_html(_listing_description_full(car))
+    item["description_html"] = _listing_description_full(car)
     item["description_summary"] = getattr(car, "description_summary", None) or item.get(
         "description_summary"
     )
@@ -637,6 +654,76 @@ def _car_matches_q_soft(
         if difflib.SequenceMatcher(None, brand_model, full_phrase).ratio() >= 0.58:
             return True
     return False
+
+
+def _query_history_tokens(car: Any) -> list[str]:
+    out: list[str] = []
+    for row in getattr(car, "search_queries", []) or []:
+        qk = (getattr(row, "query_key", None) or "").strip().lower()
+        qt = (getattr(row, "query_text", None) or "").strip().lower()
+        if qk:
+            out.append(qk)
+        if qt and qt != qk:
+            out.append(qt)
+    return out
+
+
+def _car_search_score(
+    *,
+    car: Any,
+    tokens: list[str],
+    listing_title: str,
+    brand: str,
+    model: str,
+    city: str,
+    region: str,
+    country: str,
+    description_summary: str,
+    aspect_fields: dict[str, Any],
+) -> float:
+    if not tokens:
+        return 0.0
+    score = 0.0
+    t_title = listing_title.lower()
+    t_brand = brand.lower()
+    t_model = model.lower()
+    t_desc = description_summary.lower()
+    t_loc = " ".join([city.lower(), region.lower(), country.lower()]).strip()
+    medium_fields = " ".join(
+        [
+            str(aspect_fields.get("trim") or "").lower(),
+            str(aspect_fields.get("engine") or "").lower(),
+            str(aspect_fields.get("transmission") or "").lower(),
+            str(aspect_fields.get("fuel_type") or "").lower(),
+            str(aspect_fields.get("body_style") or "").lower(),
+            str(aspect_fields.get("drive_type") or "").lower(),
+        ]
+    )
+    query_history = _query_history_tokens(car)
+    for tok in tokens:
+        if tok in t_title:
+            score += 8.0
+        if t_title.startswith(tok):
+            score += 2.0
+        if tok == t_brand or tok == t_model:
+            score += 8.0
+        elif tok in t_brand or tok in t_model:
+            score += 5.0
+        if tok in medium_fields:
+            score += 3.0
+        if tok in t_desc:
+            score += 1.0
+        if tok in t_loc:
+            score += 1.0
+        if any(tok in q for q in query_history):
+            score += 6.0
+    full_phrase = " ".join(tokens)
+    if full_phrase:
+        if full_phrase in t_title:
+            score += 4.0
+        if any(full_phrase in q for q in query_history):
+            score += 4.0
+    return score
 
 
 def _delivery_matches_modes(listing_terms: Any, modes: list[str]) -> bool:
@@ -926,31 +1013,60 @@ def apply_filters(
             _normalize_listing_format(car.listing_format)
             or (car.listing_format or "").strip().lower()
         )
-        if q_toks and not _car_matches_q_soft(
-            brand=disp_brand,
-            model=disp_model,
-            year=disp_year,
-            city=city_s,
-            region=region_s,
-            country=country_s,
-            listing_format=lf_norm,
-            condition=car.condition or "",
-            body_style=body_style,
-            vehicle_title=vt,
-            drive_type=drive_type,
-            description_summary=(getattr(car, "description_summary", None) or ""),
-            tokens=q_toks,
-        ):
-            continue
+        listing_title = _listing_title(car)
+        description_summary = getattr(car, "description_summary", None) or ""
+        score = 0.0
+        if q_toks:
+            score = _car_search_score(
+                car=car,
+                tokens=q_toks,
+                listing_title=listing_title,
+                brand=disp_brand,
+                model=disp_model,
+                city=city_s,
+                region=region_s,
+                country=country_s,
+                description_summary=description_summary,
+                aspect_fields=aspect_fields,
+            )
+            if score <= 0.0 and not _car_matches_q_soft(
+                brand=disp_brand,
+                model=disp_model,
+                year=disp_year,
+                city=city_s,
+                region=region_s,
+                country=country_s,
+                listing_format=lf_norm,
+                condition=car.condition or "",
+                body_style=body_style,
+                vehicle_title=vt,
+                drive_type=drive_type,
+                description_summary=description_summary,
+                tokens=q_toks,
+            ):
+                continue
 
         if search_key:
             src = (getattr(car, "source", None) or "").strip().lower()
             if src == "ebay":
                 ingest_key = getattr(car, "ingest_search_key", None)
                 if ingest_key and ingest_key != search_key:
-                    continue
+                    has_query_match = any(
+                        (getattr(row, "query_key", None) or "").strip().lower() == search_key
+                        for row in (getattr(car, "search_queries", []) or [])
+                    )
+                    if not has_query_match:
+                        continue
 
-        results.append(_build_car_api_dict(car))
+        item = _build_car_api_dict(car)
+        if score > 0:
+            item["_search_score"] = round(score, 3)
+        results.append(item)
+    if q_toks:
+        results.sort(
+            key=lambda x: (float(x.get("_search_score") or 0.0), float(x.get("net_profit") or 0.0)),
+            reverse=True,
+        )
     return results
 
 

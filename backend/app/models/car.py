@@ -60,6 +60,11 @@ class Car(Base):
     description_full = Column(Text, nullable=True)
     api_synced_at = Column(DateTime(timezone=True), nullable=True)
     seller_item_revision = Column(String(64), nullable=True)
+    resale_method = Column(String(32), nullable=True)
+    resale_confidence = Column(Float, nullable=True)
+    resale_comp_count = Column(Integer, nullable=True)
+    resale_segment_key = Column(String(160), nullable=True)
+    resale_estimated_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -100,6 +105,11 @@ class Car(Base):
     )
     watchlist_items = relationship(
         "UserWatchlistItem",
+        back_populates="car",
+        cascade="all, delete-orphan",
+    )
+    search_queries = relationship(
+        "CarSearchQuery",
         back_populates="car",
         cascade="all, delete-orphan",
     )

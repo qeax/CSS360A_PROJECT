@@ -13,7 +13,6 @@ from app.models.user import User
 from app.repositories.cars import (
     _q_tokens,
     apply_filters,
-    car_to_api_item,
     compute_inventory_meta,
     invalidate_in_memory_demo_cache,
     load_car_by_id,
@@ -109,8 +108,10 @@ def get_car_raw_listing(
 def refresh_car_ebay(
     car_id: int,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    from app.repositories.cars import car_to_detail_api_item
+
     try:
         outcome = refresh_car_from_ebay(db, car_id)
     except EbayRefreshError as e:
@@ -121,6 +122,10 @@ def refresh_car_ebay(
             raise HTTPException(status_code=400, detail=code) from e
         if code == "ebay_not_configured":
             raise HTTPException(status_code=503, detail="ebay_not_configured") from e
+        if code == "ebay_rate_limited":
+            raise HTTPException(status_code=429, detail=code) from e
+        if code.startswith("ebay_get_item_failed"):
+            raise HTTPException(status_code=503, detail=code) from e
         raise HTTPException(status_code=503, detail=code) from e
     except SQLAlchemyError as e:
         db.rollback()
@@ -139,7 +144,14 @@ def refresh_car_ebay(
     car = load_car_by_id(db, car_id)
     if car is None:
         raise HTTPException(status_code=404, detail="car_not_found")
-    item = car_to_api_item(car)
+    try:
+        item = car_to_detail_api_item(db, car, user_id=int(current_user.id), geocode=False)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "database_unavailable", "message": str(e)},
+        ) from e
     if item is None:
         raise HTTPException(status_code=404, detail="car_not_found")
     return {"item": item}

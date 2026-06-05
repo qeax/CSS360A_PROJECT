@@ -108,10 +108,19 @@
         }
         const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
         const profitCls = profitValueClass(car.net_profit);
+        const conf = Number(car.resale_confidence);
+        const hasConf = !Number.isNaN(conf) && conf > 0;
+        const confLabel = !hasConf ? '' : conf >= 0.75 ? 'High' : conf >= 0.45 ? 'Medium' : 'Low';
+        const method = String(car.resale_method || '').trim();
+        const compCount = Number(car.resale_comp_count || 0);
+        const sourceInfo = method
+            ? `${method}${compCount > 0 ? ` · ${compCount} comps` : ''}${confLabel ? ` · ${confLabel}` : ''}`
+            : '';
         return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true)}">
             <div class="car-card-metrics-col car-card-metrics-col--roi">
                 <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
                 <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${escapeHtml(formatRoiDisplay(car))}</span>
+                ${sourceInfo ? `<span class="car-card-metrics-col-label">${escapeHtml(sourceInfo)}</span>` : ''}
             </div>
             <span class="car-card-metrics-divider" aria-hidden="true"></span>
             <div class="car-card-metrics-col car-card-metrics-col--profit">
@@ -609,6 +618,10 @@
         };
         const watchBtn = showWatchButton ? watchHeartButtonHtml(car, isWatched) : '';
 
+        const displayTitle =
+            (typeof car.listing_title === 'string' && car.listing_title.trim()) ||
+            `${car.brand || ''} ${car.model || ''}`.trim() ||
+            'Listing';
         return `
             <article class="car-card" data-car-id="${car.id}">
                 <div class="car-card-media">
@@ -621,7 +634,7 @@
                         </div>
                         <span class="car-card-title-vrule" aria-hidden="true"></span>
                         <div class="car-card-title-main">
-                            <h3 class="car-model">${escapeHtml(car.brand)} ${escapeHtml(car.model)}</h3>
+                            <h3 class="car-model">${escapeHtml(displayTitle)}</h3>
                             <p class="car-card-subtitle">${escapeHtml(carSubtitleLine(car))}</p>
                         </div>
                         ${watchBtn}

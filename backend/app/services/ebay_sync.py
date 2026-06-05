@@ -35,6 +35,7 @@ from app.models.car_satellite import (
     CarMedia,
     VehicleAspectSnapshot,
 )
+from app.models.car_search_query import CarSearchQuery
 from app.models.ebay_sync_batch import EbaySyncBatch
 from app.models.external_seller import ExternalSeller
 from app.repositories.cars import (
@@ -44,12 +45,27 @@ from app.repositories.cars import (
     mark_expired_auctions,
 )
 from app.services.flip import estimate_flip_from_listing
-from app.services.html_sanitize import sanitize_listing_html
+from app.services.pricing import PricingInput, ResalePricingService, rebuild_vehicle_price_segments
 from app.services.search_query import normalize_search_key
+from app.services.vehicle_aspects import extended_vehicle_fields_from_aspects_json
 
 logger = logging.getLogger(__name__)
 
+# MySQL TEXT is ~64 KiB; oversized bodies stay in raw_listing_json.description.
+_MAX_DESCRIPTION_FULL_BYTES = 65000
+
+
+def _description_full_for_storage(raw: str | None) -> str | None:
+    if not raw or not str(raw).strip():
+        return None
+    text = str(raw).strip()
+    if len(text.encode("utf-8")) > _MAX_DESCRIPTION_FULL_BYTES:
+        return None
+    return text
+
+
 _last_sync_by_user: dict[int, float] = {}
+_last_segment_rebuild_at: float = 0.0
 
 
 class EbaySyncCooldownError(Exception):
@@ -86,6 +102,15 @@ def mark_sync_completed(user_id: int) -> None:
 
 def reset_sync_cooldown_for_tests() -> None:
     _last_sync_by_user.clear()
+
+
+def _maybe_refresh_segment_baselines(db: Session) -> None:
+    global _last_segment_rebuild_at
+    now = time.monotonic()
+    if now - _last_segment_rebuild_at < 3600:
+        return
+    rebuild_vehicle_price_segments(db)
+    _last_segment_rebuild_at = now
 
 
 def build_ebay_search_query(*, q: Optional[str]) -> str:
@@ -208,8 +233,50 @@ def _replace_car_children(db: Session, car: Car, item: dict[str, Any]) -> None:
         db.add(VehicleAspectSnapshot(car_id=car.id, aspects_json=aspects))
 
 
+def _upsert_car_search_query(
+    db: Session,
+    *,
+    car_id: int,
+    query_text: str | None,
+    source: str = "ebay",
+) -> None:
+    text = (query_text or "").strip()
+    if not text:
+        return
+    key = normalize_search_key(text)
+    if not key:
+        return
+    now = datetime.now(timezone.utc)
+    row = db.execute(
+        select(CarSearchQuery).where(
+            CarSearchQuery.car_id == car_id,
+            CarSearchQuery.query_key == key,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        db.add(
+            CarSearchQuery(
+                car_id=car_id,
+                query_text=text[:256],
+                query_key=key[:128],
+                source=source[:32],
+                hit_count=1,
+                last_seen_at=now,
+            )
+        )
+        return
+    row.query_text = text[:256]
+    row.source = source[:32]
+    row.hit_count = int(row.hit_count or 0) + 1
+    row.last_seen_at = now
+
+
 def upsert_ebay_listing(
-    db: Session, item: dict[str, Any], *, ingest_search_key: str | None = None
+    db: Session,
+    item: dict[str, Any],
+    *,
+    ingest_search_key: str | None = None,
+    search_query_text: str | None = None,
 ) -> Car | None:
     """Insert or update one normalized eBay listing row and satellites."""
     if item.get("error"):
@@ -217,6 +284,9 @@ def upsert_ebay_listing(
     ext_id = (item.get("external_listing_id") or "").strip()
     if not ext_id or ext_id.startswith("ebay-"):
         return None
+    car = db.execute(
+        select(Car).where(Car.source == "ebay", Car.external_listing_id == ext_id)
+    ).scalar_one_or_none()
     title = (item.get("title") or "").strip()
     if not title:
         return None
@@ -257,8 +327,35 @@ def upsert_ebay_listing(
             listing_id=ext_id,
             title_text=title,
         )
+        region = None
+        loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
+        if loc_in:
+            region = loc_in.get("region")
+        aspect_fields = extended_vehicle_fields_from_aspects_json(item.get("aspects_json"))
+        pricing_input = PricingInput(
+            external_listing_id=ext_id,
+            source="ebay",
+            purchase_price=float(price),
+            brand=brand,
+            model=model,
+            year=year_econ,
+            mileage=mileage_for_flip,
+            condition=condition_econ,
+            vehicle_title=vehicle_title_econ,
+            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            region=region,
+            synced_at=datetime.now(timezone.utc),
+            trim=aspect_fields.get("trim"),
+            engine=aspect_fields.get("engine"),
+            body_style=aspect_fields.get("body_style"),
+            title_text=title,
+            car_id=int(car.id) if car is not None else None,
+        )
+        estimate = ResalePricingService().estimate(pricing_input, db=db)
+        resale = float(estimate.resale_value)
     else:
         repair, resale = 0.0, 0.0
+        estimate = None
 
     client = get_ebay_client()
     listing_url = resolve_listing_url(
@@ -276,10 +373,6 @@ def upsert_ebay_listing(
         bid_count_int = None
 
     seller_id = _upsert_external_seller(db, item)
-
-    car = db.execute(
-        select(Car).where(Car.source == "ebay", Car.external_listing_id == ext_id)
-    ).scalar_one_or_none()
 
     core = {
         "brand": brand[:100],
@@ -302,9 +395,14 @@ def upsert_ebay_listing(
         "bid_count": bid_count_int,
         "listing_format": (item.get("listing_format") or "BUY_IT_NOW")[:50],
         "description_summary": ((item.get("description_summary") or title)[:512]),
-        "description_full": sanitize_listing_html(item.get("description_full")) or None,
+        "description_full": _description_full_for_storage(item.get("description_full")),
         "api_synced_at": now,
         "seller_item_revision": item.get("seller_item_revision"),
+        "resale_method": estimate.method if estimate else None,
+        "resale_confidence": float(estimate.confidence) if estimate else None,
+        "resale_comp_count": int(estimate.comp_count) if estimate else None,
+        "resale_segment_key": estimate.segment_key if estimate else None,
+        "resale_estimated_at": datetime.now(timezone.utc) if estimate else None,
     }
     if listing_ends is not None and listing_ends > now:
         core["auction_ended_at"] = None
@@ -320,6 +418,12 @@ def upsert_ebay_listing(
             setattr(car, key, val)
 
     _replace_car_children(db, car, item)
+    _upsert_car_search_query(
+        db,
+        car_id=int(car.id),
+        query_text=search_query_text or ingest_search_key,
+        source="ebay",
+    )
     return car
 
 
@@ -370,12 +474,20 @@ def refresh_car_from_ebay(db: Session, car_id: int) -> RefreshCarOutcome:
             message="This listing is no longer available on eBay and was removed from your inventory.",
         )
     if result.status != "ok" or not result.detail:
-        raise EbayRefreshError("ebay_get_item_failed")
+        status = result.http_status
+        if status == 429:
+            raise EbayRefreshError("ebay_rate_limited")
+        raise EbayRefreshError(f"ebay_get_item_failed:{status or 'unknown'}")
 
     detail = result.detail
+    raw = car.raw_listing_json if isinstance(car.raw_listing_json, dict) else {}
+    raw_title = (raw.get("title") or "").strip() if raw else ""
     summary = {
         "external_listing_id": ext_id,
-        "title": (getattr(car, "description_summary", None) or f"{car.brand} {car.model}").strip(),
+        "title": (
+            raw_title
+            or (getattr(car, "description_summary", None) or f"{car.brand} {car.model}").strip()
+        ),
         "source": "ebay",
         "brand": car.brand,
         "model": car.model,
@@ -387,7 +499,10 @@ def refresh_car_from_ebay(db: Session, car_id: int) -> RefreshCarOutcome:
         merged["seller_item_revision"] = detail.get("sellerItemRevision")
 
     updated = upsert_ebay_listing(
-        db, merged, ingest_search_key=getattr(car, "ingest_search_key", None)
+        db,
+        merged,
+        ingest_search_key=getattr(car, "ingest_search_key", None),
+        search_query_text=getattr(car, "ingest_search_key", None),
     )
     if updated is None:
         raise EbayRefreshError("upsert_failed")
@@ -492,7 +607,12 @@ def _upsert_enriched_wave(
             continue
         try:
             with db.begin_nested():
-                car = upsert_ebay_listing(db, merged, ingest_search_key=ingest_search_key)
+                car = upsert_ebay_listing(
+                    db,
+                    merged,
+                    ingest_search_key=ingest_search_key,
+                    search_query_text=batch.search_query,
+                )
             if car is None:
                 skipped += 1
                 continue
@@ -560,6 +680,7 @@ def _save_batch(
 
 
 def _finalize_sync_commit(db: Session, *, user_id: int, enforce_cooldown: bool) -> None:
+    _maybe_refresh_segment_baselines(db)
     mark_expired_auctions(db)
     db.commit()
     invalidate_in_memory_demo_cache()

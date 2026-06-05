@@ -107,6 +107,16 @@ def ebay_wave_size() -> int:
         return 50
 
 
+def _get_item_timeout() -> float:
+    try:
+        return max(6.0, float(os.getenv("EBAY_GET_ITEM_TIMEOUT", "25")))
+    except ValueError:
+        return 25.0
+
+
+_GET_ITEM_TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
 def ebay_fetch_cap() -> int:
     """Max distinct listings to pull per inventory refresh (batch size)."""
     return ebay_batch_size()
@@ -356,10 +366,29 @@ class EbayListingClient:
                 "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             }
             response = None
-            for attempt in range(3):
-                response = requests.get(url, headers=headers, timeout=6)
-                if response.status_code == 429 and attempt < 2:
-                    time.sleep(0.5 * (2**attempt))
+            timeout = _get_item_timeout()
+            for attempt in range(4):
+                try:
+                    response = requests.get(url, headers=headers, timeout=timeout)
+                except requests.RequestException as exc:
+                    logger.info(
+                        "eBay getItem request error for %s (attempt %s): %s",
+                        item_id,
+                        attempt + 1,
+                        exc,
+                    )
+                    if attempt < 3:
+                        time.sleep(0.75 * (2**attempt))
+                        continue
+                    return GetItemResult.error()
+                if response.status_code in _GET_ITEM_TRANSIENT_STATUSES and attempt < 3:
+                    logger.info(
+                        "eBay getItem HTTP %s for %s (attempt %s, retrying)",
+                        response.status_code,
+                        item_id,
+                        attempt + 1,
+                    )
+                    time.sleep(0.75 * (2**attempt))
                     continue
                 break
             assert response is not None

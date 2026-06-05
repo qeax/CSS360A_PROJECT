@@ -35,6 +35,7 @@ def test_car_detail_returns_extended_fields(client):
     assert "location" in item
     assert "listing_aspects" in item
     assert isinstance(item["listing_aspects"], list)
+    assert "listing_title" in item
 
 
 def test_car_detail_not_found(client):
@@ -42,9 +43,11 @@ def test_car_detail_not_found(client):
     assert response.status_code == 404
 
 
-def test_car_detail_sanitized_description(client):
+def test_car_detail_description_field(client):
     car_id = _first_car_id(client)
     response = client.get(f"/cars/{car_id}")
     assert response.status_code == 200
-    html = response.json()["item"].get("description_html") or ""
-    assert "<script" not in html.lower()
+    item = response.json()["item"]
+    assert "description_html" in item
+    if item.get("description_html"):
+        assert isinstance(item["description_html"], str)

@@ -101,6 +101,55 @@ function buildDescriptionSection(car) {
     return '';
 }
 
+function isFullHtmlDocument(html) {
+    const trimmed = String(html).trim();
+    if (!trimmed) return false;
+    if (/^<!DOCTYPE/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) return true;
+    return /<head[\s>]/i.test(trimmed.slice(0, 4000));
+}
+
+function resizeDescriptionIframe(iframe) {
+    try {
+        const doc = iframe.contentDocument;
+        const height = Math.max(
+            doc?.documentElement?.scrollHeight || 0,
+            doc?.body?.scrollHeight || 0,
+            120,
+        );
+        iframe.style.height = `${height}px`;
+    } catch (_) {
+        iframe.style.minHeight = '200px';
+    }
+}
+
+function mountListingDescription(container, html) {
+    if (!container || !html) return;
+    const trimmed = String(html).trim();
+    container.innerHTML = '';
+
+    if (!/<[a-z!/]/i.test(trimmed)) {
+        const p = document.createElement('p');
+        p.className = 'listing-description-plain';
+        p.textContent = trimmed;
+        container.appendChild(p);
+        return;
+    }
+
+    if (isFullHtmlDocument(trimmed)) {
+        const iframe = document.createElement('iframe');
+        iframe.className = 'listing-description-iframe';
+        iframe.setAttribute('title', 'Listing description');
+        iframe.setAttribute('sandbox', 'allow-same-origin');
+        iframe.setAttribute('loading', 'lazy');
+        iframe.srcdoc = trimmed;
+        iframe.addEventListener('load', () => resizeDescriptionIframe(iframe));
+        container.appendChild(iframe);
+        return;
+    }
+
+    container.innerHTML = trimmed;
+}
+
 function peekSlideHtml(url, opts = {}) {
     const { loading = 'lazy', isClone = false, isActive = false, realIndex = 0 } = opts;
     const cloneCls = isClone ? ' is-clone' : '';
@@ -238,6 +287,22 @@ function initCarDetailPeekCarousel(root, images) {
     requestAnimationFrame(() => jumpWithoutAnim(1));
 }
 
+function refreshEbayErrorMessage(detail) {
+    if (detail === 'ebay_rate_limited') {
+        return 'eBay rate limit reached. Wait a moment and try again.';
+    }
+    if (typeof detail === 'string' && detail.startsWith('ebay_get_item_failed')) {
+        return 'eBay is temporarily unavailable. Try again in a moment.';
+    }
+    if (detail === 'ebay_not_configured') {
+        return 'eBay integration is not configured on the server.';
+    }
+    if (typeof detail === 'string') {
+        return `Refresh failed: ${detail}`;
+    }
+    return 'Failed to refresh from eBay.';
+}
+
 function renderPage(car) {
     const root = document.getElementById('carDetailRoot');
     const ui = listingUi();
@@ -274,6 +339,11 @@ function renderPage(car) {
     const vehicleDetailsHtml =
         typeof ui.modalVehicleDetailsHtml === 'function' ? ui.modalVehicleDetailsHtml(car) : '';
 
+    const displayTitle =
+        (typeof car.listing_title === 'string' && car.listing_title.trim()) ||
+        `${car.brand || ''} ${car.model || ''}`.trim() ||
+        'Listing';
+    const secondaryTitle = `${car.brand || ''} ${car.model || ''}`.trim();
     root.innerHTML = `
         <a class="car-detail-back" href="${ui.escapeAttr(backHref())}">← Back to inventory</a>
         <div class="car-detail-hero" id="carGallery">${galleryHtmlWithLightbox(car)}</div>
@@ -282,7 +352,8 @@ function renderPage(car) {
                 <span class="car-year-pill">${car.year != null ? ui.escapeHtml(String(car.year)) : '—'}</span>
                 <span class="car-card-title-vrule" aria-hidden="true"></span>
                 <div class="car-detail-title-main">
-                    <h1 class="car-detail-title">${ui.escapeHtml(car.brand)} ${ui.escapeHtml(car.model)}</h1>
+                    <h1 class="car-detail-title">${ui.escapeHtml(displayTitle)}</h1>
+                    ${secondaryTitle && secondaryTitle !== displayTitle ? `<p class="car-detail-summary">${ui.escapeHtml(secondaryTitle)}</p>` : ''}
                     <p class="car-detail-subtitle">${ui.escapeHtml(ui.carSubtitleLine(car))}</p>
                     ${summaryLine}
                 </div>
@@ -306,7 +377,7 @@ function renderPage(car) {
 
     if (car.description_html) {
         const descEl = document.getElementById('listingDescriptionHtml');
-        if (descEl) descEl.innerHTML = car.description_html;
+        if (descEl) mountListingDescription(descEl, car.description_html);
     }
 
     const gallery = document.getElementById('carGallery');
@@ -349,17 +420,36 @@ function renderPage(car) {
                 window.location.replace('login.html');
                 return;
             }
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (data.deleted) {
                 showEbayToast(data.message || 'Listing removed from eBay.', { variant: 'warn' });
                 window.location.href = backHref();
                 return;
             }
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) {
+                throw new Error(refreshEbayErrorMessage(data.detail));
+            }
+            try {
+                const key = 'css360_inventory_session_v1';
+                const raw = sessionStorage.getItem(key);
+                if (raw) {
+                    const payload = JSON.parse(raw);
+                    if (Array.isArray(payload?.carData)) {
+                        const idx = payload.carData.findIndex((x) => Number(x?.id) === Number(data.item?.id));
+                        if (idx >= 0) {
+                            payload.carData[idx] = data.item;
+                            payload.savedAt = Date.now();
+                            sessionStorage.setItem(key, JSON.stringify(payload));
+                        }
+                    }
+                }
+            } catch (err2) {
+                console.warn('Failed to patch inventory session after refresh', err2);
+            }
             renderPage(data.item);
         } catch (err) {
             console.error(err);
-            showEbayToast('Failed to refresh from eBay.', { variant: 'error' });
+            showEbayToast(err.message || 'Failed to refresh from eBay.', { variant: 'error' });
             btn.disabled = false;
             btn.textContent = 'Refresh from eBay';
         }
@@ -441,7 +531,11 @@ async function main() {
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        document.title = `${data.item.brand} ${data.item.model} · Car Flip CSS360`;
+        const pageTitle =
+            (typeof data.item.listing_title === 'string' && data.item.listing_title.trim()) ||
+            `${data.item.brand || ''} ${data.item.model || ''}`.trim() ||
+            'Listing';
+        document.title = `${pageTitle} · Car Flip CSS360`;
         try {
             renderPage(data.item);
         } catch (renderErr) {

@@ -98,6 +98,8 @@ def _ebay_car(
         bid_count=2,
         ingest_search_key=ingest_key,
         price_known=price_known,
+        search_queries=[],
+        raw_listing_json={"title": f"2019 {brand} {model}"},
     )
 
 
@@ -172,6 +174,42 @@ def test_apply_filters_scopes_ebay_by_ingest_search_key():
     out = _apply([luxury, honda], "luxury cars")
     assert len(out) == 1
     assert out[0]["brand"] == "Mercedes-Benz"
+
+
+def test_apply_filters_allows_query_history_override_for_search_key():
+    car = _ebay_car(
+        ext_id="e3",
+        brand="Lexus",
+        model="RX350",
+        summary="premium crossover",
+        ingest_key="suv",
+    )
+    car.search_queries = [SimpleNamespace(query_key="luxury cars", query_text="luxury cars")]
+    out = _apply([car], "luxury cars")
+    assert len(out) == 1
+    assert out[0]["brand"] == "Lexus"
+
+
+def test_apply_filters_scores_title_match_higher():
+    exact = _ebay_car(
+        ext_id="e4",
+        brand="Honda",
+        model="Civic",
+        summary="daily commuter",
+        ingest_key="honda civic",
+    )
+    exact.raw_listing_json = {"title": "2020 Honda Civic EX"}
+    weak = _ebay_car(
+        ext_id="e5",
+        brand="Honda",
+        model="Accord",
+        summary="great alternative to civic",
+        ingest_key="honda cars",
+    )
+    weak.raw_listing_json = {"title": "2020 Honda Accord"}
+    out = _apply([weak, exact], "honda civic")
+    assert len(out) == 2
+    assert out[0]["external_listing_id"] == "e4"
 
 
 @pytest.fixture
