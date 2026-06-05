@@ -13,14 +13,24 @@ from app.models.user_notification import UserNotification
 NOTIFICATION_TTL_DAYS = 7
 
 
+def _utc_aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def purge_old_notifications(db: Session, user_id: int) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=NOTIFICATION_TTL_DAYS)
-    result = db.execute(
-        delete(UserNotification).where(
-            UserNotification.user_id == user_id,
-            UserNotification.created_at < cutoff,
-        )
-    )
+    stale_ids = [
+        row.id
+        for row in db.scalars(
+            select(UserNotification).where(UserNotification.user_id == user_id)
+        ).all()
+        if row.created_at is not None and _utc_aware(row.created_at) < cutoff
+    ]
+    if not stale_ids:
+        return 0
+    result = db.execute(delete(UserNotification).where(UserNotification.id.in_(stale_ids)))
     return int(result.rowcount or 0)
 
 

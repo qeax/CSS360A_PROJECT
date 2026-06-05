@@ -119,14 +119,14 @@ def test_resale_service_falls_back_to_segment(db):
         purchase_price=8500.0,
         brand="Ford",
         model="Focus",
-        year=2018,
+        year=2016,
         mileage=92_000,
         condition="Used",
         vehicle_title="Clean",
         listing_format="AUCTION",
-        region="NY",
+        region="TX",
         synced_at=datetime.now(timezone.utc),
-        title_text="2018 Ford Focus",
+        title_text="2016 Ford Focus",
     )
     out = ResalePricingService(comp_threshold=0.9).estimate(inp, db=db)
     assert out.method in ("segment", "comps_shrunk")

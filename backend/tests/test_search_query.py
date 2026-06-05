@@ -206,6 +206,7 @@ def test_apply_filters_scores_title_match_higher():
         summary="great alternative to civic",
         ingest_key="honda cars",
     )
+    weak.search_queries = [SimpleNamespace(query_key="honda civic", query_text="honda civic")]
     weak.raw_listing_json = {"title": "2020 Honda Accord"}
     out = _apply([weak, exact], "honda civic")
     assert len(out) == 2

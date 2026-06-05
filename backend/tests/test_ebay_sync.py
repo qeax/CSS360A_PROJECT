@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
+from app.integrations.ebay.inventory import _default_ebay_query
 from app.models import EbaySyncBatch  # noqa: F401 — register table
 from app.models.car import Car
 from app.models.car_satellite import CarLocation, CarMedia
@@ -60,14 +61,15 @@ def _sample_listing(
 
 
 def test_build_ebay_search_query_short_uses_default():
-    assert build_ebay_search_query(q="ab") == "car"
-    assert build_ebay_search_query(q=None) == "car"
+    default_q = _default_ebay_query()
+    assert build_ebay_search_query(q="ab") == default_q
+    assert build_ebay_search_query(q=None) == default_q
 
 
 def test_build_ebay_search_query_ignores_makes():
     q = build_ebay_search_query(q="honda civic")
     assert q == "honda civic"
-    assert build_ebay_search_query(q="ab") == "car"
+    assert build_ebay_search_query(q="ab") == _default_ebay_query()
 
 
 def test_upsert_ebay_listing_insert(db):
@@ -130,17 +132,16 @@ def test_sync_cooldown(monkeypatch, db):
         fake_search,
     )
 
-    def _fake_enrich(self, rows, **kw):
-        return [{**rows[0], "raw_listing_json": {"itemId": "v1|200|0"}}]
-
-    monkeypatch.setattr(
-        "app.integrations.ebay.client.EbayListingClient.enrich_summaries",
-        _fake_enrich,
-    )
-
     class _FakeClient:
+        sandbox = False
+
         def is_configured(self) -> bool:
             return True
+
+        def enrich_summaries(self, rows, *, max_items=None):
+            if not rows:
+                return []
+            return [{**rows[0], "raw_listing_json": {"itemId": "v1|200|0"}}]
 
     monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
 
@@ -162,6 +163,8 @@ def test_sync_fetch_failure_returns_failed_status(monkeypatch, db):
     monkeypatch.setattr("app.services.ebay_sync.search_listings_batch", boom)
 
     class _FakeClient:
+        sandbox = False
+
         def is_configured(self) -> bool:
             return True
 
@@ -184,17 +187,14 @@ def test_sync_success_includes_ok_status(monkeypatch, db):
         lambda **_kwargs: [listing],
     )
 
-    def _fake_enrich(self, rows, **kw):
-        return [rows[0] if rows else None]
-
-    monkeypatch.setattr(
-        "app.integrations.ebay.client.EbayListingClient.enrich_summaries",
-        _fake_enrich,
-    )
-
     class _FakeClient:
+        sandbox = False
+
         def is_configured(self) -> bool:
             return True
+
+        def enrich_summaries(self, rows, *, max_items=None):
+            return [rows[0] if rows else None]
 
     monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
 

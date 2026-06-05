@@ -17,7 +17,6 @@ from app.services.ebay_sync import (
     _save_batch,
     continue_ebay_batch,
     reset_sync_cooldown_for_tests,
-    search_listings_batch,
     start_ebay_batch,
 )
 
@@ -61,11 +60,20 @@ def _detail_for(row: dict) -> dict:
 
 
 def test_search_listings_batch_filters_vehicles(monkeypatch):
-    monkeypatch.setattr(
-        "app.services.ebay_sync.search_listings_batch",
-        lambda **_kwargs: _search_rows(3),
-    )
-    rows = search_listings_batch(query="car")
+    import app.services.ebay_sync as ebay_sync
+
+    class _FakeClient:
+        sandbox = False
+
+        def is_configured(self) -> bool:
+            return True
+
+        def search_listings(self, query, limit=None, max_price=None):
+            del query, max_price
+            return _search_rows(3)[: limit or 3]
+
+    monkeypatch.setattr("app.services.ebay_sync.get_ebay_client", lambda: _FakeClient())
+    rows = ebay_sync.search_listings_batch(query="car")
     assert len(rows) == 3
 
 
@@ -74,10 +82,13 @@ def test_start_batch_enriches_first_wave_only(monkeypatch, db):
     summaries = _search_rows(5, prefix="batch")
 
     class _FakeClient:
+        sandbox = False
+
         def is_configured(self) -> bool:
             return True
 
         def search_listings(self, query, limit=None, max_price=None):
+            del query, max_price
             return summaries[:limit]
 
         def enrich_summaries(self, rows, *, max_items=None):
@@ -120,10 +131,13 @@ def test_continue_batch_second_wave(monkeypatch, db):
     summaries = _search_rows(4, prefix="cont")
 
     class _FakeClient:
+        sandbox = False
+
         def is_configured(self) -> bool:
             return True
 
         def search_listings(self, query, limit=None, max_price=None):
+            del query, max_price
             return summaries[:limit]
 
         def enrich_summaries(self, rows, *, max_items=None):
