@@ -18,7 +18,9 @@ def run_backfill() -> None:
         rebuild_vehicle_price_segments(db)
         service = ResalePricingService()
         cars = list(
-            db.scalars(select(Car).where(Car.price_known.is_(True), Car.price > 0, Car.source == "ebay"))
+            db.scalars(
+                select(Car).where(Car.price_known.is_(True), Car.price > 0, Car.source == "ebay")
+            )
         )
         updated = 0
         for car in cars:
