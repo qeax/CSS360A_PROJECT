@@ -43,6 +43,14 @@ def calculate_flip_score(
         "is_profitable": net_profit > 0,
     }
 
+def flip_metrics_unknown() -> dict[str, Any]:
+    """Return flip metrics when purchase price is unknown."""
+    return {
+        "net_profit": None,
+        "roi": None,
+        "is_profitable": False,
+    }
+
 
 def _stable_jitter(key: str | None, amplitude: float) -> float:
     if not key:
