@@ -2,7 +2,7 @@
 
 from app.integrations.ebay.price import parse_listing_price
 from app.repositories.cars import sort_car_dicts_inplace
-from app.services.flip import calculate_flip_score, flip_metrics_unknown
+from app.services.flip import flip_metrics_unknown
 
 
 def test_parse_listing_price_valid():
