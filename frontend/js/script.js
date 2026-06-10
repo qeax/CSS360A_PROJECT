@@ -1468,7 +1468,9 @@ async function executeSearch({ append = false, syncEbay = false, scrollToTop } =
             : useBatchContinue
               ? 'Loading more from eBay…'
               : 'Loading inventory…';
-        const spinner = '<span class="loading-spinner" aria-hidden="true"></span>';
+        const spinner = (window.Css360Listing && window.Css360Listing.loadingCarMarkup)
+            ? window.Css360Listing.loadingCarMarkup()
+            : '';
         list.innerHTML = `<div class="loading loading--sync">${spinner}<span>${loadingLabel}</span></div>`;
     } else if (loadBtn) {
         loadBtn.dataset.loading = '1';
