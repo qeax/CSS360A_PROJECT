@@ -657,15 +657,16 @@ def _save_batch(
     if not search_key:
         search_key = ""
     expires = datetime.now(timezone.utc) + timedelta(hours=_batch_ttl_hours())
-    existing = db.execute(
-        select(EbaySyncBatch).where(
+
+    # Robustly clear any existing batch for this user/search_key combo
+    db.execute(
+        delete(EbaySyncBatch).where(
             EbaySyncBatch.user_id == user_id,
             EbaySyncBatch.search_key == search_key,
         )
-    ).scalar_one_or_none()
-    if existing is not None:
-        db.delete(existing)
-        db.flush()
+    )
+    db.flush()
+
     batch = EbaySyncBatch(
         user_id=user_id,
         search_key=search_key,
