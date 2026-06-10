@@ -71,7 +71,7 @@ def _normalize_meta_slider_bounds(
     if max_year <= min_year:
         min_year, max_year = int(defaults["min_year"]), int(defaults["max_year"])
     if max_mileage <= min_mileage:
-        min_mileage, max_mileage = int(defaults["min_mileage"], int(defaults["max_mileage"])
+        min_mileage, max_mileage = int(defaults["min_mileage"]), int(defaults["max_mileage"])
     return min_price, max_price, min_year, max_year, min_mileage, max_mileage
 
 
@@ -254,9 +254,7 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
     mi = disp_mileage
     price_known = bool(getattr(car, "price_known", True))
     if price_known:
-        analysis = calculate_flip_score(
-            car.price, car.resale_value, car.repair_cost or 0
-        )
+        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
     else:
         analysis = flip_metrics_unknown()
     aspect_fields = _aspect_fields_for_car(car)
@@ -930,9 +928,7 @@ def apply_filters(
             continue
 
         if price_known:
-            analysis = calculate_flip_score(
-                car.price, car.resale_value, car.repair_cost or 0
-            )
+            analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
         else:
             analysis = flip_metrics_unknown()
         if (exclude_negative_roi or exclude_negative_profit) and analysis.get(
