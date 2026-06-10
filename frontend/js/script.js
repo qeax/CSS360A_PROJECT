@@ -144,13 +144,22 @@ function calculateHeatmapBorder(roi) {
 }
 
 /** Background + border for metrics block from ROI score. */
-function metricsBlockHeatStyle(roi, priceKnown = true) {
+function metricsBlockHeatStyle(roi, priceKnown = true, confidence = null, roiPreliminary = false) {
     if (priceKnown === false || roi == null || Number.isNaN(Number(roi))) {
         return 'background: var(--bg-page); border-color: var(--border-color);';
     }
     const heat = calculateHeatmap(roi, 40, 58);
     const border = calculateHeatmapBorder(roi);
-    return `background: color-mix(in srgb, ${heat} 22%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
+    let mixPct = 22;
+    const conf = Number(confidence);
+    if (!Number.isNaN(conf) && conf > 0) {
+        if (conf < 0.45) mixPct = 12;
+        else if (conf < 0.75) mixPct = 17;
+    }
+    if (roiPreliminary) {
+        mixPct = Math.min(mixPct, 10);
+    }
+    return `background: color-mix(in srgb, ${heat} ${mixPct}%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
 }
 
 function isPriceKnown(car) {
@@ -2055,10 +2064,11 @@ function showCarDetails(car) {
                     <div style="font-size:24px;font-weight:700;color:${car.net_profit >= 0 ? 'var(--accent-green)' : '#ef4444'};">${escapeHtml(formatProfitDisplay(car))}</div>
                 </div>
                 <div style="background:var(--bg-page);padding:12px;border-radius:8px;">
-                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">ROI</div>
+                    <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">ROI${car.roi_is_preliminary ? ' (preliminary)' : ''}</div>
                     <div style="font-size:24px;font-weight:700;color:${car.roi >= 0 ? 'var(--accent-green)' : '#ef4444'};">${escapeHtml(formatRoiDisplay(car))}</div>
                 </div>
-            </div>`
+            </div>
+            ${car.roi_is_preliminary ? `<p style="font-size:12px;color:var(--text-muted);margin:0;">ROI uses est. acquisition ${formatPriceShort(car.purchase_price_effective)} (current bid ${formatPriceShort(car.price)}).</p>` : ''}`
         : '';
 
     content.innerHTML = `

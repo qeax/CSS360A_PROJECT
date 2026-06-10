@@ -316,6 +316,14 @@ def upsert_ebay_listing(
     vtitle_raw = item.get("vehicle_title")
     vehicle_title_econ = (str(vtitle_raw).strip() if vtitle_raw is not None else None) or None
 
+    bid_count = item.get("bid_count")
+    try:
+        bid_count_int = int(bid_count) if bid_count is not None else None
+    except (TypeError, ValueError):
+        bid_count_int = None
+
+    listing_format = item.get("listing_format") or "BUY_IT_NOW"
+
     if price_known:
         repair, resale = estimate_flip_from_listing(
             price,
@@ -323,9 +331,10 @@ def upsert_ebay_listing(
             mileage=mileage_for_flip,
             condition=condition_econ,
             vehicle_title=vehicle_title_econ,
-            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            listing_format=listing_format,
             listing_id=ext_id,
             title_text=title,
+            bid_count=bid_count_int,
         )
         region = None
         loc_in = item.get("location") if isinstance(item.get("location"), dict) else {}
@@ -342,7 +351,7 @@ def upsert_ebay_listing(
             mileage=mileage_for_flip,
             condition=condition_econ,
             vehicle_title=vehicle_title_econ,
-            listing_format=item.get("listing_format") or "BUY_IT_NOW",
+            listing_format=listing_format,
             region=region,
             synced_at=datetime.now(timezone.utc),
             trim=aspect_fields.get("trim"),
@@ -365,12 +374,6 @@ def upsert_ebay_listing(
     )
     now = datetime.now(timezone.utc)
     listing_ends = _parse_listing_ends_at(item.get("listing_ends_at"))
-
-    bid_count = item.get("bid_count")
-    try:
-        bid_count_int = int(bid_count) if bid_count is not None else None
-    except (TypeError, ValueError):
-        bid_count_int = None
 
     seller_id = _upsert_external_seller(db, item)
 

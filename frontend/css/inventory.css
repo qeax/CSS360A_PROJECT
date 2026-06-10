@@ -709,6 +709,21 @@ article.car-card:focus-within .car-card-carousel-dots {
     font-variant-numeric: tabular-nums;
 }
 
+.car-card-roi-preliminary {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    border-radius: 4px;
+    vertical-align: middle;
+    cursor: help;
+}
+
 .car-card-metrics-col-value--positive {
     color: var(--accent-green);
 }

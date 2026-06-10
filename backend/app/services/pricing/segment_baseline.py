@@ -11,6 +11,31 @@ from app.models.car import Car
 from app.models.vehicle_price_segment import VehiclePriceSegment
 from app.services.pricing.types import PricingInput
 
+_AUCTION_SEGMENT_MIN_PRICE = 1000.0
+_AUCTION_SEGMENT_MEDIAN_RATIO = 0.25
+
+
+def _is_auction_format(listing_format: str | None) -> bool:
+    return "AUCTION" in (listing_format or "").upper()
+
+
+def _filter_segment_prices(cars: list[Car]) -> list[float]:
+    """Drop unrealistically low auction bids before computing segment medians."""
+    prices = sorted(float(c.price) for c in cars if c.price is not None and float(c.price) > 0)
+    if not prices:
+        return []
+    provisional = statistics.median(prices)
+    floor = max(_AUCTION_SEGMENT_MIN_PRICE, provisional * _AUCTION_SEGMENT_MEDIAN_RATIO)
+    filtered: list[float] = []
+    for car in cars:
+        if car.price is None or float(car.price) <= 0:
+            continue
+        price = float(car.price)
+        if _is_auction_format(car.listing_format) and price < floor:
+            continue
+        filtered.append(price)
+    return sorted(filtered)
+
 
 @dataclass(frozen=True)
 class SegmentBaseline:
@@ -62,7 +87,7 @@ def rebuild_vehicle_price_segments(db: Session) -> int:
     now = datetime.now(timezone.utc)
     created = 0
     for key, cars in buckets.items():
-        prices = sorted(float(c.price) for c in cars if c.price is not None and c.price > 0)
+        prices = _filter_segment_prices(cars)
         if not prices:
             continue
         miles = sorted(int(c.mileage) for c in cars if c.mileage is not None and c.mileage > 0)
