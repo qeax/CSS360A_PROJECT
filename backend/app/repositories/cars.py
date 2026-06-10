@@ -302,9 +302,7 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
     mi = disp_mileage
     price_known = bool(getattr(car, "price_known", True))
     if price_known:
-        analysis = calculate_flip_score(
-            car.price, car.resale_value, car.repair_cost or 0, price_known=True
-        )
+        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
     else:
         analysis = flip_metrics_unknown()
     aspect_fields = _aspect_fields_for_car(car)
@@ -986,9 +984,7 @@ def apply_filters(
             continue
 
         if price_known:
-            analysis = calculate_flip_score(
-                car.price, car.resale_value, car.repair_cost or 0, price_known=True
-            )
+            analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
         else:
             analysis = flip_metrics_unknown()
         if (exclude_negative_roi or exclude_negative_profit) and analysis.get(

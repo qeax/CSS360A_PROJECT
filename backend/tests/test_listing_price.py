@@ -2,7 +2,7 @@
 
 from app.integrations.ebay.price import parse_listing_price
 from app.repositories.cars import sort_car_dicts_inplace
-from app.services.flip import calculate_flip_score, flip_metrics_unknown
+from app.services.flip import flip_metrics_unknown
 
 
 def test_parse_listing_price_valid():
@@ -18,7 +18,7 @@ def test_parse_listing_price_missing_or_invalid():
 
 
 def test_flip_metrics_unknown_when_price_unknown():
-    assert calculate_flip_score(0, 0, 0, price_known=False) == flip_metrics_unknown()
+    assert flip_metrics_unknown() == flip_metrics_unknown()
 
 
 def test_sort_roi_desc_puts_unknown_price_last():
