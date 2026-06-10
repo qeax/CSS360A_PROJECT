@@ -32,6 +32,77 @@ class _VehicleSignals:
     title_known: bool
 
 
+def _is_collectible_vehicle(title_text: str | None, year: int | None) -> bool:
+    """
+    Detect classic, rare, or enthusiast vehicles that don't follow normal depreciation.
+    Analyzes title text and year to identify potential high-value collectibles.
+    """
+    text = (title_text or "").lower()
+
+    # 1. Classic American Muscle (1960s-1970s)
+    muscle_cars = [
+        "mustang",
+        "camaro",
+        "corvette",
+        "charger",
+        "challenger",
+        "chevelle",
+        "firebird",
+        "gto",
+        "barracuda",
+        "nova ss",
+        "impala",
+        "barracuda",
+    ]
+    if any(m in text for m in muscle_cars):
+        if year and 1960 <= year <= 1979:
+            return True
+        if year and 1980 <= year <= 1995:  # Later muscle still holds value
+            return True
+
+    # 2. Japanese Sports Cars (JDM Legends)
+    jdm_legends = [
+        "supra",
+        "skyline",
+        "silvia",
+        "rx-7",
+        "nsx",
+        "300zx",
+        "celica",
+        "mr2",
+        "rx7",
+        "s13",
+        "s14",
+    ]
+    if any(m in text for m in jdm_legends):
+        if year and 1985 <= year <= 2005:
+            return True
+
+    # 3. European Exotics/Sports
+    exotic_brands = [
+        "porsche",
+        "ferrari",
+        "lamborghini",
+        "mclaren",
+        "aston martin",
+        "maserati",
+        "lotus",
+    ]
+    if any(b in text for b in exotic_brands):
+        return True
+
+    # 4. German Performance (BMW M, Mercedes AMG, Audi RS)
+    if any(x in text for x in ["m3", "m5", "m4", "amg", "c63", "e63", "rs4", "rs6", "rs7"]):
+        return True
+
+    # 5. Limited Editions/Special Trims
+    special_trims = ["gt3", "gt500", "z06", "type r", "evo", "sti", "r34", "r32", "shelby"]
+    if any(t in text for t in special_trims):
+        return True
+
+    return False
+
+
 def calculate_flip_score(
     purchase_price: float, resale_value: float, repair_cost: float = 0
 ) -> dict[str, Any]:
@@ -378,6 +449,37 @@ def estimate_flip_economics(
     if known_signals < 3:
         age = signals.age if signals.age_known else 7
 
+        # === AUCTION BASELINE FIX ===
+        # If price is suspiciously low (e.g., $1, $99), use a realistic market baseline
+        # instead of the current bid, so ROI and depreciation math work correctly.
+        if price < 1000:
+            is_collectible = _is_collectible_vehicle(title_text, age)
+
+            # 2026 Market Baselines (Private Party Averages)
+            STANDARD_BASELINES = {
+                0: 26500,  # 0-3 years: 2023-2026 models
+                3: 19000,  # 4-6 years: 2020-2022 models
+                6: 12500,  # 7-10 years: 2016-2019 models
+                10: 7200,  # 11-15 years: 2011-2015 models
+                15: 3800,  # 16+ years: 2010 and older
+            }
+            COLLECTIBLE_BASELINES = {
+                0: 45000,  # Modern exotics/limited editions
+                3: 38000,  # Recent classics
+                6: 32000,  # 90s-2000s JDM/sports cars
+                10: 28000,  # 2000s muscle/performance
+                15: 22000,  # Classic muscle (appreciating)
+            }
+
+            baselines = COLLECTIBLE_BASELINES if is_collectible else STANDARD_BASELINES
+
+            # Find appropriate baseline for this age
+            price = 2500  # Fallback
+            for age_threshold in sorted(baselines.keys()):
+                if age <= age_threshold + 3:
+                    price = baselines[age_threshold]
+                    break
+
         # Age factor (compounds annually)
         if age <= 1:
             age_factor = 0.85
@@ -388,31 +490,38 @@ def estimate_flip_economics(
         else:
             age_factor = max(0.25, 0.85 * (0.90**2) * (0.95**5) * (0.97 ** (age - 8)))
 
-        # Mileage adjustment (-$0.12/mile over 12k/yr average)
+        # Mileage adjustment (-$0.18/mile over 12k/yr average)
         expected_mileage = 12_000 * max(1, age)
         actual_mileage = signals.mileage if signals.mileage_known else expected_mileage
         mileage_diff = actual_mileage - expected_mileage
-        mileage_adjustment = mileage_diff * -0.12
+        mileage_adjustment = mileage_diff * -0.18
         mileage_adjustment = max(-price * 0.25, min(price * 0.25, mileage_adjustment))
 
-        # Condition & Title multipliers
+        # Condition & Title multipliers (Conservative for private sellers)
         cond = signals.condition if signals.condition_known else "used"
         title = signals.title if signals.title_known else "unknown"
+
         CONDITION_MAP = {
-            "new": 1.15,
-            "certified": 1.08,
-            "used": 1.0,
-            "salvage": 0.65,
-            "fair": 0.85,
-            "poor": 0.65,
+            "new": 1.05,  # -10%
+            "certified": 0.95,  # -13%
+            "used": 0.82,  # -18%
+            "salvage": 0.55,  # -15%
+            "fair": 0.70,  # -18%
+            "poor": 0.50,  # -23%
         }
         TITLE_MAP = {"clean": 1.05, "rebuilt": 0.80, "salvage": 0.70, "risky": 0.75, "unknown": 1.0}
+
         condition_factor = CONDITION_MAP.get(cond, 1.0)
         title_factor = TITLE_MAP.get(title, 1.0)
 
         # Calculate estimated resale value
         estimated_value = price * age_factor * condition_factor * title_factor + mileage_adjustment
-        estimated_value = max(price * 0.30, min(price * 1.20, estimated_value))
+
+        # Private seller discount (12% less than dealer pricing)
+        estimated_value = estimated_value * 0.88
+
+        # Clamp bounds
+        estimated_value = max(price * 0.25, min(price * 0.95, estimated_value))
 
         # Dynamic repair cost
         REPAIR_PCT = {
