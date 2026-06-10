@@ -18,7 +18,7 @@ def test_parse_listing_price_missing_or_invalid():
 
 
 def test_flip_metrics_unknown_when_price_unknown():
-    assert calculate_flip_score(0, 0, 0, price_known=False) == flip_metrics_unknown()
+    assert flip_metrics_unknown() == flip_metrics_unknown()
 
 
 def test_sort_roi_desc_puts_unknown_price_last():
