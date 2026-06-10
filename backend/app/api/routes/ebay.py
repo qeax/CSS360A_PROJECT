@@ -53,8 +53,18 @@ async def health_check(
         "in_memory_demo_enabled": in_memory_demo_enabled(),
         "database_has_cars": db_has_cars,
     }
+    if client.is_configured():
+        client._get_access_token()
+        if client.last_token_diagnostic:
+            payload["token"] = client.last_token_diagnostic
     if probe and client.is_configured():
         payload["probe"] = probe_ebay_search(probe_query, limit=5)
     if client.last_search_diagnostic:
         payload["last_search"] = client.last_search_diagnostic
+    if payload.get("token", {}).get("ok") is False:
+        payload["hint"] = (
+            "eBay OAuth token failed. In developer.ebay.com use the Production App ID "
+            "(EBAY_CLIENT_ID) and Cert ID (EBAY_CLIENT_SECRET) from the same key set; "
+            "set EBAY_SANDBOX=false for production keys or true for sandbox (SBX) keys."
+        )
     return payload

@@ -457,7 +457,14 @@
 
 .listing-description--html:has(.listing-description-iframe) {
     padding: 0;
-    overflow: hidden;
+    overflow: visible;
+}
+
+.listing-description--html a {
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
 }
 
 .listing-description-iframe {

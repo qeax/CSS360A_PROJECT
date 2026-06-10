@@ -158,6 +158,7 @@ class EbayListingClient:
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[datetime] = None
         self.last_search_diagnostic: dict[str, Any] = {}
+        self.last_token_diagnostic: dict[str, Any] = {}
 
     def _credentials_look_sandbox(self) -> bool:
         cid = self.client_id.upper()
@@ -191,12 +192,20 @@ class EbayListingClient:
             token_data = response.json()
             self.access_token = token_data["access_token"]
             self.token_expiry = datetime.now() + timedelta(seconds=token_data["expires_in"])
+            self.last_token_diagnostic = {"ok": True, "http_status": response.status_code}
             return self.access_token
         except requests.HTTPError as e:
             body = e.response.text[:300] if e.response is not None else ""
-            logger.warning("eBay token HTTP %s: %s", getattr(e.response, "status_code", "?"), body)
+            status = getattr(e.response, "status_code", None)
+            self.last_token_diagnostic = {
+                "ok": False,
+                "http_status": status,
+                "error": body or str(e),
+            }
+            logger.warning("eBay token HTTP %s: %s", status or "?", body)
             return None
         except Exception as e:
+            self.last_token_diagnostic = {"ok": False, "http_status": None, "error": str(e)}
             logger.warning("eBay token error: %s", e)
             return None
 
