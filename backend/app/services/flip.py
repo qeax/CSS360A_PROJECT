@@ -43,6 +43,7 @@ def calculate_flip_score(
         "is_profitable": net_profit > 0,
     }
 
+
 def flip_metrics_unknown() -> dict[str, Any]:
     """Return flip metrics when purchase price is unknown."""
     return {
@@ -364,19 +365,17 @@ def estimate_flip_economics(
     )
 
     # Count how many core signals we actually have
-    known_signals = sum(
-        [
-            signals.age_known,
-            signals.mileage_known,
-            signals.condition_known,
-            signals.title_known,
-        ]
-    )
+    known_signals = sum([
+        signals.age_known,
+        signals.mileage_known,
+        signals.condition_known,
+        signals.title_known,
+    ])
 
     # === FALLBACK: Transparent Depreciation Model (sparse data) ===
     if known_signals < 3:
         age = signals.age if signals.age_known else 7
-
+        
         # Age factor (compounds annually)
         if age <= 1:
             age_factor = 0.85
@@ -397,14 +396,7 @@ def estimate_flip_economics(
         # Condition & Title multipliers
         cond = signals.condition if signals.condition_known else "used"
         title = signals.title if signals.title_known else "unknown"
-        CONDITION_MAP = {
-            "new": 1.15,
-            "certified": 1.08,
-            "used": 1.0,
-            "salvage": 0.65,
-            "fair": 0.85,
-            "poor": 0.65,
-        }
+        CONDITION_MAP = {"new": 1.15, "certified": 1.08, "used": 1.0, "salvage": 0.65, "fair": 0.85, "poor": 0.65}
         TITLE_MAP = {"clean": 1.05, "rebuilt": 0.80, "salvage": 0.70, "risky": 0.75, "unknown": 1.0}
         condition_factor = CONDITION_MAP.get(cond, 1.0)
         title_factor = TITLE_MAP.get(title, 1.0)
@@ -414,14 +406,7 @@ def estimate_flip_economics(
         estimated_value = max(price * 0.30, min(price * 1.20, estimated_value))
 
         # Dynamic repair cost
-        REPAIR_PCT = {
-            "new": 0.04,
-            "certified": 0.06,
-            "used": 0.08,
-            "salvage": 0.25,
-            "fair": 0.12,
-            "poor": 0.18,
-        }
+        REPAIR_PCT = {"new": 0.04, "certified": 0.06, "used": 0.08, "salvage": 0.25, "fair": 0.12, "poor": 0.18}
         repair_pct = REPAIR_PCT.get(cond, 0.08)
         repair_cost = round(max(200.0, estimated_value * repair_pct), 2)
 
@@ -528,4 +513,5 @@ def estimate_flip_from_listing(
         listing_id=listing_id,
         title_text=title_text,
     )
-    return econ["repair_cost"], econ["resale_value"]
+    return econ["repair_cost"], econ["resale_value"] 
+ 

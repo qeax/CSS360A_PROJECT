@@ -71,7 +71,7 @@ def _normalize_meta_slider_bounds(
     if max_year <= min_year:
         min_year, max_year = int(defaults["min_year"]), int(defaults["max_year"])
     if max_mileage <= min_mileage:
-        min_mileage, max_mileage = int(defaults["min_mileage"]), int(defaults["max_mileage"])
+        min_mileage, max_mileage = int(defaults["min_mileage"], int(defaults["max_mileage"])
     return min_price, max_price, min_year, max_year, min_mileage, max_mileage
 
 
@@ -87,6 +87,8 @@ def _effective_mileage(car: Any) -> int | None:
         mi = int(mm)
         if is_plausible_odometer(mi):
             return mi
+    except (TypeError, ValueError):
+        pass
     return None
 
 
@@ -214,7 +216,6 @@ def load_inventory_cars_from_db(db: Session, *, search_key: str | None = None) -
         .order_by(Car.id)
     )
     if search_key:
-        # Include legacy eBay rows (ingest_search_key NULL) — relevance via apply_filters text match.
         stmt = stmt.where(
             or_(
                 Car.source != "ebay",
@@ -405,7 +406,7 @@ def load_inventory_for_request(db: Session, *, search_key: str | None = None) ->
 
 
 def iter_cars(db: Session, *, inventory_query: str | None = None):
-    del inventory_query  # eBay ingest is explicit via sync_ebay_inventory
+    del inventory_query
     return load_inventory_cars_from_db(db)
 
 
@@ -505,7 +506,6 @@ def _image_urls_for_car(car: Car) -> list[str]:
     def _catalog_urls() -> list[str]:
         return pick_media_urls_for_car(brand, model, idx)
 
-    # Demo / legacy seed rows may still store picsum URLs in DB — always serve catalog photos.
     if _is_demo_inventory_car(car):
         catalog = _catalog_urls()
         if catalog:
@@ -529,7 +529,6 @@ def _normalize_listing_format(value: Optional[str]) -> str:
     if not value or not isinstance(value, str):
         return ""
     v = value.strip().upper().replace("-", "_").replace(" ", "_")
-    # "ACCEPTS_OFFER" contains the substring "AUCTION" — check offers before auction.
     if v == "ACCEPTS_OFFER" or ("ACCEPT" in v and "OFFER" in v):
         return "ACCEPTS_OFFER"
     if "CLASSIFIED" in v:
@@ -948,7 +947,7 @@ def apply_filters(
             if analysis.get("roi") is None or analysis["roi"] < min_roi:
                 continue
 
-        mileage = mi  # None when odometer unknown (UI shows —)
+        mileage = mi
         drive_type = _drive_type_for_car(car)
 
         listing_terms = car.listing_terms
