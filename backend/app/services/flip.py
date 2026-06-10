@@ -19,6 +19,26 @@ _REPAIR_WEIGHT_TITLE_RISKY = 0.10  # only when title is known and risky
 _REPAIR_PCT_FLOOR = 0.025
 _REPAIR_PCT_SPAN = 0.36  # floor + span * score ≈ 2.5% … 38.5%
 
+# Auction bid reliability thresholds (see resolve_effective_purchase_price).
+_AUCTION_LOW_BID_THRESHOLD = 1000.0
+_AUCTION_REFERENCE_RATIO = 0.20
+_AUCTION_EARLY_BID_MAX = 5000.0
+
+_STANDARD_BASELINES: dict[int, float] = {
+    0: 26500,  # 0-3 years
+    3: 19000,  # 4-6 years
+    6: 12500,  # 7-10 years
+    10: 7200,  # 11-15 years
+    15: 3800,  # 16+ years
+}
+_COLLECTIBLE_BASELINES: dict[int, float] = {
+    0: 45000,
+    3: 38000,
+    6: 32000,
+    10: 28000,
+    15: 22000,
+}
+
 
 @dataclass(frozen=True)
 class _VehicleSignals:
@@ -103,6 +123,90 @@ def _is_collectible_vehicle(title_text: str | None, year: int | None) -> bool:
     return False
 
 
+def _is_auction_format(listing_format: str | None) -> bool:
+    return "AUCTION" in (listing_format or "").upper()
+
+
+def _vehicle_age_from_year(year: int | None, title_text: str | None = None) -> int:
+    model_year = _coerce_year(year) or _year_from_text(title_text)
+    if model_year is None:
+        return 7
+    return max(0, datetime.now().year - model_year)
+
+
+def _market_baseline_price(year: int | None, title_text: str | None) -> float:
+    """Age-based private-party market baseline for unreliable auction bids."""
+    model_year = _coerce_year(year) or _year_from_text(title_text)
+    age = _vehicle_age_from_year(model_year, title_text)
+    is_collectible = _is_collectible_vehicle(title_text, model_year)
+    baselines = _COLLECTIBLE_BASELINES if is_collectible else _STANDARD_BASELINES
+    baseline = 2500.0
+    for age_threshold in sorted(baselines.keys()):
+        if age <= age_threshold + 3:
+            baseline = baselines[age_threshold]
+            break
+    return float(baseline)
+
+
+def is_unreliable_auction_bid(
+    price: float,
+    listing_format: str | None,
+    *,
+    bid_count: int | None = None,
+    reference_value: float | None = None,
+) -> bool:
+    """True when current auction bid is too low to use for ROI / repair math."""
+    if not _is_auction_format(listing_format):
+        return False
+    if price < _AUCTION_LOW_BID_THRESHOLD:
+        return True
+    if (
+        reference_value is not None
+        and reference_value > 0
+        and price < reference_value * _AUCTION_REFERENCE_RATIO
+    ):
+        return True
+    if bid_count is not None and bid_count <= 1 and price < _AUCTION_EARLY_BID_MAX:
+        return True
+    return False
+
+
+def resolve_effective_purchase_price(
+    price: float,
+    *,
+    listing_format: str | None = None,
+    bid_count: int | None = None,
+    year: int | None = None,
+    title_text: str | None = None,
+    reference_value: float | None = None,
+    segment_median: float | None = None,
+) -> tuple[float, bool]:
+    """
+    Return (effective_price, is_estimated).
+
+    For live auctions with unrealistically low bids, substitutes a market-based
+    acquisition estimate instead of the current bid.
+    """
+    price = max(1.0, float(price))
+    ref = segment_median if segment_median is not None else reference_value
+    if not is_unreliable_auction_bid(
+        price, listing_format, bid_count=bid_count, reference_value=ref
+    ):
+        return price, False
+
+    if segment_median is not None and segment_median > 0:
+        effective = segment_median
+    else:
+        baseline = _market_baseline_price(year, title_text)
+        if baseline > 0:
+            effective = baseline
+        elif reference_value is not None and reference_value > 0:
+            effective = reference_value * 0.75
+        else:
+            effective = price
+    return round(max(effective, price), 2), True
+
+
 def calculate_flip_score(
     purchase_price: float, resale_value: float, repair_cost: float = 0
 ) -> dict[str, Any]:
@@ -113,6 +217,33 @@ def calculate_flip_score(
         "roi": round(roi, 1),
         "is_profitable": net_profit > 0,
     }
+
+
+def calculate_flip_score_for_listing(
+    price: float,
+    resale_value: float,
+    repair_cost: float = 0,
+    *,
+    listing_format: str | None = None,
+    bid_count: int | None = None,
+    year: int | None = None,
+    title_text: str | None = None,
+    segment_median: float | None = None,
+) -> dict[str, Any]:
+    """ROI metrics using effective purchase price when auction bid is unreliable."""
+    effective, is_preliminary = resolve_effective_purchase_price(
+        price,
+        listing_format=listing_format,
+        bid_count=bid_count,
+        year=year,
+        title_text=title_text,
+        reference_value=resale_value,
+        segment_median=segment_median,
+    )
+    score = calculate_flip_score(effective, resale_value, repair_cost)
+    score["purchase_price_effective"] = effective
+    score["roi_is_preliminary"] = is_preliminary
+    return score
 
 
 def flip_metrics_unknown() -> dict[str, Any]:
@@ -419,6 +550,7 @@ def estimate_flip_economics(
     listing_format: str | None = None,
     listing_id: str | None = None,
     title_text: str | None = None,
+    bid_count: int | None = None,
 ) -> dict[str, Any]:
     """
     Estimate reconditioning cost and after-repair resale (ARV).
@@ -427,6 +559,13 @@ def estimate_flip_economics(
     Falls back to a transparent depreciation model when key signals are missing.
     """
     price = max(1.0, float(purchase_price))
+    price, _ = resolve_effective_purchase_price(
+        price,
+        listing_format=listing_format,
+        bid_count=bid_count,
+        year=year,
+        title_text=title_text,
+    )
     signals = _resolve_signals(
         year=year,
         mileage=mileage,
@@ -448,37 +587,6 @@ def estimate_flip_economics(
     # === FALLBACK: Transparent Depreciation Model (sparse data) ===
     if known_signals < 3:
         age = signals.age if signals.age_known else 7
-
-        # === AUCTION BASELINE FIX ===
-        # If price is suspiciously low (e.g., $1, $99), use a realistic market baseline
-        # instead of the current bid, so ROI and depreciation math work correctly.
-        if price < 1000:
-            is_collectible = _is_collectible_vehicle(title_text, age)
-
-            # 2026 Market Baselines (Private Party Averages)
-            STANDARD_BASELINES = {
-                0: 26500,  # 0-3 years: 2023-2026 models
-                3: 19000,  # 4-6 years: 2020-2022 models
-                6: 12500,  # 7-10 years: 2016-2019 models
-                10: 7200,  # 11-15 years: 2011-2015 models
-                15: 3800,  # 16+ years: 2010 and older
-            }
-            COLLECTIBLE_BASELINES = {
-                0: 45000,  # Modern exotics/limited editions
-                3: 38000,  # Recent classics
-                6: 32000,  # 90s-2000s JDM/sports cars
-                10: 28000,  # 2000s muscle/performance
-                15: 22000,  # Classic muscle (appreciating)
-            }
-
-            baselines = COLLECTIBLE_BASELINES if is_collectible else STANDARD_BASELINES
-
-            # Find appropriate baseline for this age
-            price = 2500  # Fallback
-            for age_threshold in sorted(baselines.keys()):
-                if age <= age_threshold + 3:
-                    price = baselines[age_threshold]
-                    break
 
         # Age factor (compounds annually)
         if age <= 1:
@@ -603,6 +711,7 @@ def estimate_flip_from_listing(
     listing_format: str | None = None,
     listing_id: str | None = None,
     title_text: str | None = None,
+    bid_count: int | None = None,
 ) -> tuple[float, float]:
     """
     Back-compat tuple API for eBay inventory (wraps estimate_flip_economics).
@@ -637,5 +746,6 @@ def estimate_flip_from_listing(
         listing_format=listing_format,
         listing_id=listing_id,
         title_text=title_text,
+        bid_count=bid_count,
     )
     return econ["repair_cost"], econ["resale_value"]

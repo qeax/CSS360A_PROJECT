@@ -12,6 +12,25 @@ from app.models.car_satellite import VehicleAspectSnapshot
 from app.services.pricing.types import ComparableCandidate, PricingInput
 from app.services.vehicle_aspects import extended_vehicle_fields_from_aspects_json
 
+_AUCTION_COMP_MIN_PRICE = 1000.0
+_AUCTION_COMP_MEDIAN_RATIO = 0.25
+
+
+def _is_auction_format(listing_format: str | None) -> bool:
+    return "AUCTION" in (listing_format or "").upper()
+
+
+def _is_reliable_comp_price(price: float, listing_format: str | None, *, floor: float) -> bool:
+    """Exclude early-auction bids that would skew comp medians downward."""
+    if not _is_auction_format(listing_format):
+        return True
+    if price < _AUCTION_COMP_MIN_PRICE:
+        return False
+    if floor > 0 and price < floor:
+        return False
+    return True
+
+
 _RECENCY_HALFLIFE_DAYS = 45.0
 
 
@@ -129,8 +148,29 @@ def find_comparables(
         stmt = stmt.where(Car.year.between(listing.year - 2, listing.year + 2))
 
     rows = list(db.scalars(stmt.limit(300)).all())
+    provisional_prices = sorted(
+        float(c.price) for c in rows if c.price is not None and float(c.price) > 0
+    )
+    provisional_median = None
+    if provisional_prices:
+        mid = len(provisional_prices) // 2
+        if len(provisional_prices) % 2:
+            provisional_median = provisional_prices[mid]
+        else:
+            provisional_median = (provisional_prices[mid - 1] + provisional_prices[mid]) / 2.0
+    auction_floor = _AUCTION_COMP_MIN_PRICE
+    if provisional_median is not None and provisional_median > 0:
+        auction_floor = max(
+            _AUCTION_COMP_MIN_PRICE, provisional_median * _AUCTION_COMP_MEDIAN_RATIO
+        )
+
     out: list[ComparableCandidate] = []
     for car in rows:
+        comp_price = float(car.price) if car.price is not None else 0.0
+        if comp_price <= 0:
+            continue
+        if not _is_reliable_comp_price(comp_price, car.listing_format, floor=auction_floor):
+            continue
         aspects = (
             car.aspect_snapshots[0].aspects_json if getattr(car, "aspect_snapshots", None) else None
         )

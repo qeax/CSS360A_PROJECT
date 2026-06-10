@@ -19,7 +19,7 @@ from app.integrations.ebay.parse_item import (
     resolve_vehicle_facets,
 )
 from app.models.car import Car
-from app.services.flip import calculate_flip_score, flip_metrics_unknown
+from app.services.flip import calculate_flip_score_for_listing, flip_metrics_unknown
 from app.services.geo import haversine_km, latlng_pair
 from app.services.search_query import meaningful_query_tokens, normalize_search_key
 from app.services.vehicle_aspects import (
@@ -295,16 +295,29 @@ def car_to_api_item(car: Car) -> dict[str, Any] | None:
     return _build_car_api_dict(car)
 
 
+def _flip_analysis_for_car(car: Car) -> dict[str, Any]:
+    """Compute ROI / profit metrics, using effective price for unreliable auction bids."""
+    price_known = bool(getattr(car, "price_known", True))
+    if not price_known:
+        return flip_metrics_unknown()
+    return calculate_flip_score_for_listing(
+        float(car.price or 0),
+        float(car.resale_value or 0),
+        float(car.repair_cost or 0),
+        listing_format=car.listing_format,
+        bid_count=car.bid_count,
+        year=car.year,
+        title_text=_listing_title(car),
+    )
+
+
 def _build_car_api_dict(car: Car) -> dict[str, Any]:
     """Build inventory API dict for one car (no filter exclusions)."""
     ended = auction_has_ended(car)
     disp_brand, disp_model, disp_year, disp_mileage = _vehicle_display_fields(car)
     mi = disp_mileage
     price_known = bool(getattr(car, "price_known", True))
-    if price_known:
-        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
-    else:
-        analysis = flip_metrics_unknown()
+    analysis = _flip_analysis_for_car(car)
     aspect_fields = _aspect_fields_for_car(car)
     body_style = aspect_fields.get("body_style")
     vt = (getattr(car, "vehicle_title", None) or "").strip()
@@ -984,7 +997,7 @@ def apply_filters(
             continue
 
         if price_known:
-            analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
+            analysis = _flip_analysis_for_car(car)
         else:
             analysis = flip_metrics_unknown()
         if (exclude_negative_roi or exclude_negative_profit) and analysis.get(

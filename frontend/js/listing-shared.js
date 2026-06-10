@@ -64,6 +64,29 @@
         return isPriceKnown(car) && !car.auction_ended;
     }
 
+    function isRoiPreliminary(car) {
+        return Boolean(car && car.roi_is_preliminary);
+    }
+
+    function roiPreliminaryTooltip(car) {
+        const bid =
+            car.price != null && !Number.isNaN(Number(car.price))
+                ? formatPriceShort(car.price)
+                : '—';
+        const est =
+            car.purchase_price_effective != null &&
+            !Number.isNaN(Number(car.purchase_price_effective))
+                ? formatPriceShort(car.purchase_price_effective)
+                : '—';
+        return `ROI is based on estimated acquisition price (${est}). Current bid: ${bid}.`;
+    }
+
+    function roiPreliminaryBadgeHtml(car) {
+        if (!isRoiPreliminary(car)) return '';
+        const tip = roiPreliminaryTooltip(car);
+        return `<span class="car-card-roi-preliminary" title="${escapeAttr(tip)}" tabindex="0" aria-label="${escapeAttr(`Preliminary ROI. ${tip}`)}">Preliminary</span>`;
+    }
+
     function formatRoiDisplay(car) {
         if (!isPriceKnown(car) || car.roi == null || Number.isNaN(Number(car.roi))) {
             return 'Unable to determine';
@@ -88,7 +111,7 @@
         return calculateHeatmap(roi, 32, 55);
     }
 
-    function metricsBlockHeatStyle(roi, priceKnown = true, confidence = null) {
+    function metricsBlockHeatStyle(roi, priceKnown = true, confidence = null, roiPreliminary = false) {
         if (priceKnown === false || roi == null || Number.isNaN(Number(roi))) {
             return 'background: var(--bg-page); border-color: var(--border-color);';
         }
@@ -99,6 +122,9 @@
         if (!Number.isNaN(conf) && conf > 0) {
             if (conf < 0.45) mixPct = 12;
             else if (conf < 0.75) mixPct = 17;
+        }
+        if (roiPreliminary) {
+            mixPct = Math.min(mixPct, 10);
         }
         return `background: color-mix(in srgb, ${heat} ${mixPct}%, var(--bg-page)); border-color: color-mix(in srgb, ${border} 55%, var(--border-color));`;
     }
@@ -204,11 +230,28 @@
             ? `<span class="car-detail-economics-confidence car-detail-economics-confidence--${escapeAttr(conf.tier)}" title="${escapeAttr(confTooltip)}" tabindex="0" aria-label="${escapeAttr(`${conf.label} confidence. ${confTooltip}`)}">${escapeHtml(conf.label)} confidence</span>`
             : '';
 
+        const preliminaryBadge = isRoiPreliminary(car)
+            ? `<span class="car-detail-economics-confidence car-detail-economics-confidence--low" title="${escapeAttr(roiPreliminaryTooltip(car))}" tabindex="0">Preliminary ROI</span>`
+            : '';
+
+        const purchaseRows = isRoiPreliminary(car)
+            ? `<div class="car-detail-economics-dl-row">
+                    <dt>Current bid</dt>
+                    <dd>${escapeHtml(formatPriceShort(car.price))}</dd>
+                </div>
+                <div class="car-detail-economics-dl-row">
+                    <dt>Est. acquisition</dt>
+                    <dd>${escapeHtml(formatPriceShort(car.purchase_price_effective))} — used for ROI when the bid is unrealistically low</dd>
+                </div>`
+            : '';
+
         return `<section class="car-detail-economics-note" aria-label="How resale and ROI were estimated">
             <h2 class="car-detail-economics-note-title">How we estimated resale</h2>
             <p class="car-detail-economics-note-lead">${escapeHtml(lead)}</p>
             ${confBadge}
+            ${preliminaryBadge}
             <dl class="car-detail-economics-dl">
+                ${purchaseRows}
                 <div class="car-detail-economics-dl-row">
                     <dt>Resale (est.)</dt>
                     <dd>${escapeHtml(resaleDisplay)} — expected price after reconditioning</dd>
@@ -219,7 +262,7 @@
                 </div>
                 <div class="car-detail-economics-dl-row">
                     <dt>ROI (est.)</dt>
-                    <dd>${escapeHtml(formatRoiDisplay(car))} — return based on purchase, repair, and resale</dd>
+                    <dd>${escapeHtml(formatRoiDisplay(car))}${isRoiPreliminary(car) ? ' — preliminary, based on estimated acquisition price' : ' — return based on purchase, repair, and resale'}</dd>
                 </div>
             </dl>
             <p class="car-detail-economics-note-foot car-detail-economics-note-foot--muted">Comparable prices reflect asking prices from eBay listings, not final sold prices.</p>
@@ -238,10 +281,11 @@
         const roiLabel = (car.source || '').toLowerCase() === 'ebay' ? 'ROI (est.)' : 'ROI';
         const profitCls = profitValueClass(car.net_profit);
         const metaHtml = resaleEstimateMetaHtml(car);
-        return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true, car.resale_confidence)}">
+        const prelimBadge = roiPreliminaryBadgeHtml(car);
+        return `<div class="car-card-metrics-compact" style="${metricsBlockHeatStyle(car.roi, true, car.resale_confidence, isRoiPreliminary(car))}">
             <div class="car-card-metrics-col car-card-metrics-col--roi">
                 <span class="car-card-metrics-col-label">${escapeHtml(roiLabel)}</span>
-                <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${escapeHtml(formatRoiDisplay(car))}</span>
+                <span class="car-card-metrics-col-value car-card-metrics-col-value--roi">${escapeHtml(formatRoiDisplay(car))}${prelimBadge}</span>
                 ${metaHtml}
             </div>
             <span class="car-card-metrics-divider" aria-hidden="true"></span>
@@ -786,6 +830,8 @@
         formatRoiDisplay,
         formatProfitDisplay,
         metricsBlockHeatStyle,
+        isRoiPreliminary,
+        roiPreliminaryBadgeHtml,
         calculateHeatmap,
         calculateHeatmapBorder,
         metricsBlockHtml,

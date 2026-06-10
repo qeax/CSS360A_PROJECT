@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.car import Car
 from app.repositories.cars import _listing_ends_at_iso
-from app.services.flip import calculate_flip_score, flip_metrics_unknown
+from app.services.flip import calculate_flip_score_for_listing, flip_metrics_unknown
 from app.services.pricing.service import ResalePricingService
 from app.services.pricing.types import PricingInput, ResaleEstimate
 from app.services.vehicle_aspects import extended_vehicle_fields_from_aspects_json
@@ -69,8 +69,17 @@ def refresh_car_resale_estimate(db: Session, car: Car) -> ResaleEstimate | None:
 def _patch_api_item_resale(item: dict[str, Any], car: Car) -> None:
     price_known = bool(getattr(car, "price_known", True))
     if price_known:
-        analysis = calculate_flip_score(
-            car.price, car.resale_value, car.repair_cost or 0, price_known=True
+        title_text = None
+        if isinstance(car.raw_listing_json, dict):
+            title_text = car.raw_listing_json.get("title")
+        analysis = calculate_flip_score_for_listing(
+            float(car.price or 0),
+            float(car.resale_value or 0),
+            float(car.repair_cost or 0),
+            listing_format=car.listing_format,
+            bid_count=car.bid_count,
+            year=car.year,
+            title_text=title_text,
         )
     else:
         analysis = flip_metrics_unknown()
