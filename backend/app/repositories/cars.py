@@ -41,55 +41,102 @@ def _year_slider_bounds() -> tuple[int, int]:
     return _YEAR_SLIDER_MIN, _YEAR_SLIDER_MAX
 
 
-def slider_defaults() -> dict[str, float | int]:
-    """Canonical filter slider bounds (single source of truth for UI fallbacks)."""
-    (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
-    year_lo, year_hi = _year_slider_bounds()
-    return {
-        "min_price": price_lo,
-        "max_price": price_hi,
-        "min_year": year_lo,
-        "max_year": year_hi,
-        "min_mileage": mi_lo,
-        "max_mileage": mi_hi,
-    }
-
-
-def _normalize_meta_slider_bounds(
-    *,
-    min_price: float,
-    max_price: float,
-    min_year: int,
-    max_year: int,
-    min_mileage: int,
-    max_mileage: int,
-) -> tuple[float, float, int, int, int, int]:
-    """Ensure min < max for each dimension; use slider_defaults() when data is invalid."""
-    defaults = slider_defaults()
-    if max_price <= min_price:
-        min_price, max_price = defaults["min_price"], defaults["max_price"]
-    if max_year <= min_year:
-        min_year, max_year = int(defaults["min_year"]), int(defaults["max_year"])
-    if max_mileage <= min_mileage:
-        min_mileage, max_mileage = int(defaults["min_mileage"]), int(defaults["max_mileage"])
-    return min_price, max_price, min_year, max_year, min_mileage, max_mileage
-
-
 logger = logging.getLogger(__name__)
 
 
-def _effective_mileage(car: Any) -> int | None:
-    """Plausible odometer for mileage filters; None when unknown (do not invent values)."""
+def _listing_mileage_mi(car: Any) -> int | None:
+    """Plausible odometer from listing, or None when unknown."""
     mm = getattr(car, "mileage", None)
     if mm is None:
         return None
     try:
         mi = int(mm)
-        if is_plausible_odometer(mi):
-            return mi
     except (TypeError, ValueError):
-        pass
+        return None
+    if is_plausible_odometer(mi):
+        return mi
     return None
+
+
+def _raw_listing_dict(car: Any) -> dict[str, Any] | None:
+    raw = getattr(car, "raw_listing_json", None)
+    return raw if isinstance(raw, dict) else None
+
+
+def _description_from_raw_listing(raw: dict[str, Any]) -> str | None:
+    for key in ("description", "Description"):
+        val = raw.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _listing_description_full(car: Any) -> str | None:
+    """Full HTML/text description — prefer the longest available source."""
+    candidates: list[str] = []
+    stored = getattr(car, "description_full", None)
+    if isinstance(stored, str) and stored.strip():
+        candidates.append(stored.strip())
+    raw = _raw_listing_dict(car)
+    if raw:
+        raw_desc = _description_from_raw_listing(raw)
+        if raw_desc:
+            candidates.append(raw_desc)
+        try:
+            aspects_json = _latest_aspects_json(car)
+            if not aspects_json:
+                aspects_json = raw.get("localizedAspects") or raw.get("aspects_json")
+            from app.services.vehicle_aspects import extract_aspect_value
+
+            aspect_desc = extract_aspect_value(
+                aspects_json,
+                ("description", "item description", "seller's item description"),
+            )
+            if aspect_desc:
+                candidates.append(aspect_desc)
+        except Exception:
+            pass
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+def _listing_title(car: Any) -> str:
+    raw = _raw_listing_dict(car)
+    if raw:
+        title = (raw.get("title") or "").strip()
+        if title:
+            return title
+    return (getattr(car, "description_summary", None) or "").strip()
+
+
+def _vehicle_display_fields(car: Any) -> tuple[str, str, int | None, int | None]:
+    """Resolve brand/model/year/mileage for API output (DB + raw JSON + title)."""
+    raw = _raw_listing_dict(car)
+    title = _listing_title(car)
+    aspects = raw.get("aspects_json") if raw else None
+    facets = resolve_vehicle_facets(
+        title,
+        brand_hint=car.brand,
+        model_hint=car.model,
+        year_hint=car.year,
+        aspects=aspects,
+    )
+    mileage = _listing_mileage_mi(car)
+    if mileage is None:
+        mileage = resolve_listing_mileage(
+            title,
+            mileage_hint=raw.get("mileage") if raw else None,
+            aspects=aspects,
+        )
+    brand = facets["brand"] or car.brand
+    model = facets["model"] or car.model
+    year = facets["year"] if facets["year"] is not None else car.year
+    if year is None and _coerce_listing_year(car.brand or ""):
+        year = _coerce_listing_year(car.brand)
+        if brand == str(year):
+            brand = facets["brand"] or "Unknown"
+    return brand, model, year, mileage
 
 
 def _demo_catalog_slider_bounds() -> tuple[tuple[float, float], tuple[int, int]]:
@@ -216,6 +263,7 @@ def load_inventory_cars_from_db(db: Session, *, search_key: str | None = None) -
         .order_by(Car.id)
     )
     if search_key:
+        # Include legacy eBay rows (ingest_search_key NULL) — relevance via apply_filters text match.
         stmt = stmt.where(
             or_(
                 Car.source != "ebay",
@@ -254,7 +302,9 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
     mi = disp_mileage
     price_known = bool(getattr(car, "price_known", True))
     if price_known:
-        analysis = calculate_flip_score(car.price, car.resale_value, car.repair_cost or 0)
+        analysis = calculate_flip_score(
+            car.price, car.resale_value, car.repair_cost or 0, price_known=True
+        )
     else:
         analysis = flip_metrics_unknown()
     aspect_fields = _aspect_fields_for_car(car)
@@ -404,7 +454,7 @@ def load_inventory_for_request(db: Session, *, search_key: str | None = None) ->
 
 
 def iter_cars(db: Session, *, inventory_query: str | None = None):
-    del inventory_query
+    del inventory_query  # eBay ingest is explicit via sync_ebay_inventory
     return load_inventory_cars_from_db(db)
 
 
@@ -504,6 +554,7 @@ def _image_urls_for_car(car: Car) -> list[str]:
     def _catalog_urls() -> list[str]:
         return pick_media_urls_for_car(brand, model, idx)
 
+    # Demo / legacy seed rows may still store picsum URLs in DB — always serve catalog photos.
     if _is_demo_inventory_car(car):
         catalog = _catalog_urls()
         if catalog:
@@ -527,6 +578,7 @@ def _normalize_listing_format(value: Optional[str]) -> str:
     if not value or not isinstance(value, str):
         return ""
     v = value.strip().upper().replace("-", "_").replace(" ", "_")
+    # "ACCEPTS_OFFER" contains the substring "AUCTION" — check offers before auction.
     if v == "ACCEPTS_OFFER" or ("ACCEPT" in v and "OFFER" in v):
         return "ACCEPTS_OFFER"
     if "CLASSIFIED" in v:
@@ -833,14 +885,20 @@ def apply_filters(
         if model and model.lower() not in disp_model.lower():
             continue
 
-        mi = _effective_mileage(car)
+        if min_year is not None or max_year is not None:
+            if disp_year is None:
+                continue
+            if min_year is not None and disp_year < min_year:
+                continue
+            if max_year is not None and disp_year > max_year:
+                continue
+
+        mi = disp_mileage
         if mi is not None:
             if min_mileage is not None and mi < min_mileage:
                 continue
             if max_mileage is not None and mi > max_mileage:
                 continue
-        elif min_mileage is not None or max_mileage is not None:
-            continue
 
         cond_value = (car.condition or "").strip().lower()
         if conditions_l:
@@ -943,33 +1001,7 @@ def apply_filters(
             if analysis.get("roi") is None or analysis["roi"] < min_roi:
                 continue
 
-        mileage = mi
-        drive_type = _drive_type_for_car(car)
-
-        listing_terms = car.listing_terms
-        delivery = None
-        if listing_terms is not None:
-            delivery = {
-                "ship_to_home": listing_terms.ship_to_home,
-                "local_pickup": listing_terms.local_pickup,
-                "in_store_pickup": listing_terms.in_store_pickup,
-            }
-
-        location_out = None
-        if loc is not None:
-            location_out = {
-                "country": loc.country,
-                "region": loc.region,
-                "city": loc.city,
-                "postal_code_masked": loc.postal_code_masked,
-            }
-
-        seller_username = None
-        es = car.external_seller
-        if es is not None:
-            seller_username = es.username
-
-        listing_ends_at = _listing_ends_at_iso(car.listing_ends_at)
+        drive_type = aspect_fields.get("drive_type")
 
         city_s = (loc.city or "") if loc else ""
         region_s = (loc.region or "") if loc else ""
@@ -1042,11 +1074,8 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
         inventory_source = "database"
         cars = load_inventory_cars_from_db(db)
     elif get_ebay_client().is_configured():
-        inventory_source = "ebay"
-        cars = fetch_ebay_inventory_views(None)
-        if not cars and in_memory_demo_enabled():
-            inventory_source = "demo"
-            cars = list(_get_cached_in_memory_cars())
+        inventory_source = "database"
+        cars = []
     elif in_memory_demo_enabled():
         inventory_source = "demo"
         cars = list(_get_cached_in_memory_cars())
@@ -1057,17 +1086,8 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
     if not cars:
         (price_lo, price_hi), (mi_lo, mi_hi) = _demo_catalog_slider_bounds()
         year_lo, year_hi = _year_slider_bounds()
-        price_lo, price_hi, year_lo, year_hi, mi_lo, mi_hi = _normalize_meta_slider_bounds(
-            min_price=price_lo,
-            max_price=price_hi,
-            min_year=year_lo,
-            max_year=year_hi,
-            min_mileage=mi_lo,
-            max_mileage=mi_hi,
-        )
         return {
             "inventory_source": inventory_source,
-            "slider_defaults": slider_defaults(),
             "min_price": price_lo,
             "max_price": price_hi,
             "min_year": year_lo,
@@ -1165,23 +1185,14 @@ def compute_inventory_meta(db: Session) -> dict[str, Any]:
                 },
             )
 
-    price_lo, price_hi, year_lo, year_hi, mi_lo, mi_hi = _normalize_meta_slider_bounds(
-        min_price=float(price_lo),
-        max_price=float(price_hi),
-        min_year=int(year_lo),
-        max_year=int(year_hi),
-        min_mileage=int(mi_lo),
-        max_mileage=int(mi_hi),
-    )
     return {
         "inventory_source": inventory_source,
-        "slider_defaults": slider_defaults(),
-        "min_price": price_lo,
-        "max_price": price_hi,
-        "min_year": year_lo,
-        "max_year": year_hi,
-        "min_mileage": mi_lo,
-        "max_mileage": mi_hi,
+        "min_price": float(price_lo),
+        "max_price": float(price_hi),
+        "min_year": int(year_lo),
+        "max_year": int(year_hi),
+        "min_mileage": int(mi_lo),
+        "max_mileage": int(mi_hi),
         "countries": sorted(countries, key=str.lower),
         "regions_by_country": {
             k: sorted(v, key=str.lower) for k, v in sorted(regions_by_country.items())
