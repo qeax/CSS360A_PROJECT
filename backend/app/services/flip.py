@@ -392,19 +392,20 @@ def estimate_flip_economics(
         expected_mileage = 12_000 * max(1, age)
         actual_mileage = signals.mileage if signals.mileage_known else expected_mileage
         mileage_diff = actual_mileage - expected_mileage
-        mileage_adjustment = mileage_diff * -0.12
+        mileage_adjustment = mileage_diff * -0.18
         mileage_adjustment = max(-price * 0.25, min(price * 0.25, mileage_adjustment))
-
+        private_seller_discount = 0.88  # 12% less than dealer pricing
+        estimated_value = estimated_value * private_seller_discount
         # Condition & Title multipliers
         cond = signals.condition if signals.condition_known else "used"
         title = signals.title if signals.title_known else "unknown"
         CONDITION_MAP = {
-            "new": 1.15,
-            "certified": 1.08,
-            "used": 1.0,
-            "salvage": 0.65,
-            "fair": 0.85,
-            "poor": 0.65,
+            "new": 1.05,  # Was 1.15 → -10%
+            "certified": 0.95,  # Was 1.08 → -13%
+            "used": 0.82,  # Was 1.0  → -18%
+            "salvage": 0.55,  # Was 0.65 → -15%
+            "fair": 0.70,  # Was 0.85 → -18%
+            "poor": 0.50,  # Was 0.65 → -23%
         }
         TITLE_MAP = {"clean": 1.05, "rebuilt": 0.80, "salvage": 0.70, "risky": 0.75, "unknown": 1.0}
         condition_factor = CONDITION_MAP.get(cond, 1.0)
@@ -412,7 +413,7 @@ def estimate_flip_economics(
 
         # Calculate estimated resale value
         estimated_value = price * age_factor * condition_factor * title_factor + mileage_adjustment
-        estimated_value = max(price * 0.30, min(price * 1.20, estimated_value))
+        estimated_value = max(price * 0.25, min(price * 0.95, estimated_value))
 
         # Dynamic repair cost
         REPAIR_PCT = {
