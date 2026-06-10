@@ -108,6 +108,19 @@ function isFullHtmlDocument(html) {
     return /<head[\s>]/i.test(trimmed.slice(0, 4000));
 }
 
+function isSafeListingHref(href) {
+    if (!href || typeof href !== 'string') return false;
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith('#')) return false;
+    if (/^javascript:/i.test(trimmed)) return false;
+    return /^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed);
+}
+
+function openListingLink(href) {
+    if (!isSafeListingHref(href)) return;
+    window.open(href, '_blank', 'noopener,noreferrer');
+}
+
 function resizeDescriptionIframe(iframe) {
     try {
         const doc = iframe.contentDocument;
@@ -120,6 +133,61 @@ function resizeDescriptionIframe(iframe) {
     } catch (_) {
         iframe.style.minHeight = '200px';
     }
+}
+
+function wireDescriptionIframeLinks(iframe) {
+    try {
+        const doc = iframe.contentDocument;
+        if (!doc) return;
+        doc.querySelectorAll('a[href]').forEach((anchor) => {
+            const href = anchor.getAttribute('href');
+            if (!isSafeListingHref(href)) return;
+            anchor.setAttribute('target', '_blank');
+            anchor.setAttribute('rel', 'noopener noreferrer');
+            anchor.addEventListener('click', (event) => {
+                event.preventDefault();
+                openListingLink(href);
+            });
+        });
+    } catch (_) {
+        // srcdoc + allow-same-origin should always be readable; ignore if not.
+    }
+}
+
+function scheduleDescriptionIframeResize(iframe) {
+    const resize = () => resizeDescriptionIframe(iframe);
+    const onReady = () => {
+        wireDescriptionIframeLinks(iframe);
+        resize();
+        try {
+            const doc = iframe.contentDocument;
+            doc?.querySelectorAll('img').forEach((img) => {
+                if (!img.complete) img.addEventListener('load', resize, { once: true });
+            });
+            if (typeof ResizeObserver !== 'undefined' && doc?.body) {
+                const observer = new ResizeObserver(resize);
+                observer.observe(doc.body);
+                iframe._descriptionResizeObserver = observer;
+            }
+        } catch (_) {}
+        [50, 250, 1000, 3000].forEach((ms) => window.setTimeout(resize, ms));
+    };
+    iframe.addEventListener('load', onReady);
+    if (iframe.contentDocument?.readyState === 'complete') onReady();
+}
+
+function wireListingDescriptionLinks(container) {
+    if (!container) return;
+    container.querySelectorAll('a[href]').forEach((anchor) => {
+        const href = anchor.getAttribute('href');
+        if (!isSafeListingHref(href)) return;
+        anchor.setAttribute('target', '_blank');
+        anchor.setAttribute('rel', 'noopener noreferrer');
+        anchor.addEventListener('click', (event) => {
+            event.preventDefault();
+            openListingLink(href);
+        });
+    });
 }
 
 function mountListingDescription(container, html) {
@@ -139,15 +207,20 @@ function mountListingDescription(container, html) {
         const iframe = document.createElement('iframe');
         iframe.className = 'listing-description-iframe';
         iframe.setAttribute('title', 'Listing description');
-        iframe.setAttribute('sandbox', 'allow-same-origin');
+        iframe.setAttribute(
+            'sandbox',
+            'allow-same-origin allow-popups allow-popups-to-escape-sandbox',
+        );
         iframe.setAttribute('loading', 'lazy');
+        iframe.setAttribute('scrolling', 'no');
         iframe.srcdoc = trimmed;
-        iframe.addEventListener('load', () => resizeDescriptionIframe(iframe));
+        scheduleDescriptionIframeResize(iframe);
         container.appendChild(iframe);
         return;
     }
 
     container.innerHTML = trimmed;
+    wireListingDescriptionLinks(container);
 }
 
 function peekSlideHtml(url, opts = {}) {

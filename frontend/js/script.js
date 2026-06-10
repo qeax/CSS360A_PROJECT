@@ -5,7 +5,7 @@
 const VIEW_STORAGE_KEY = 'inventory_view';
 const SORT_DESC_KEY = 'inventory_sort_desc';
 const PAGE_SIZE = 50;
-const INVENTORY_SESSION_KEY = 'css360_inventory_session_v1';
+const INVENTORY_SESSION_KEY = 'css360_inventory_session_v2';
 const FILTER_PREFS_KEY = 'css360_filter_prefs_v1';
 const INVENTORY_SESSION_TTL_MS = 30 * 60 * 1000;
 const LOCATION_NOT_SPECIFIED = '__not_specified__';
@@ -1376,6 +1376,13 @@ function restoreInventorySession() {
             return false;
         }
         if (!Array.isArray(payload.carData) || payload.carData.length === 0) {
+            clearInventorySession();
+            return false;
+        }
+        const cachedSources = new Set(
+            payload.carData.map((car) => String(car?.source || '').toLowerCase()).filter(Boolean),
+        );
+        if (cachedSources.has('demo')) {
             clearInventorySession();
             return false;
         }

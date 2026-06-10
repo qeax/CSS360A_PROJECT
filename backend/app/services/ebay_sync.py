@@ -731,11 +731,24 @@ def start_ebay_batch(
         _finalize_sync_commit(db, user_id=user_id, enforce_cooldown=enforce_cooldown)
         db.refresh(batch)
 
+        last_diag = getattr(client, "last_search_diagnostic", None) or {}
+        token_failed = last_diag.get("error") == "token_failed"
+        sync_status = "failed" if token_failed else "ok"
+        sync_error = None
+        if token_failed:
+            token_diag = getattr(client, "last_token_diagnostic", None) or {}
+            sync_error = (
+                "eBay OAuth token failed"
+                + (f" (HTTP {token_diag['http_status']})" if token_diag.get("http_status") else "")
+                + ". Check EBAY_CLIENT_ID / EBAY_CLIENT_SECRET and EBAY_SANDBOX in .env."
+            )
+
         return {
             "synced": wave_stats["synced"],
             "skipped": wave_stats["skipped"],
             "configured": True,
-            "status": "ok",
+            "status": sync_status,
+            "error": sync_error,
             "query": search_q,
             "query_key": search_key,
             "api_rows": len(summaries),
