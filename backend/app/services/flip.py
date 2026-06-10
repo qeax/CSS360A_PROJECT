@@ -339,13 +339,12 @@ def estimate_flip_economics(
     listing_format: str | None = None,
     listing_id: str | None = None,
     title_text: str | None = None,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """
     Estimate reconditioning cost and after-repair resale (ARV).
 
-    Repair cost is driven mainly by year (age), mileage, and condition.
-    Missing year/mileage/condition/title use neutral imputations and lower weight.
-    Pass ``title_text`` (listing headline) to infer year when ``year`` is omitted.
+    Uses the existing heuristic model when sufficient data is present.
+    Falls back to a transparent depreciation model when key signals are missing.
     """
     price = max(1.0, float(purchase_price))
     signals = _resolve_signals(
@@ -356,6 +355,83 @@ def estimate_flip_economics(
         title_text=title_text,
     )
 
+    # Count how many core signals we actually have
+    known_signals = sum(
+        [
+            signals.age_known,
+            signals.mileage_known,
+            signals.condition_known,
+            signals.title_known,
+        ]
+    )
+
+    # === FALLBACK: Transparent Depreciation Model (sparse data) ===
+    if known_signals < 3:
+        age = signals.age if signals.age_known else 7
+
+        # Age factor (compounds annually)
+        if age <= 1:
+            age_factor = 0.85
+        elif age <= 3:
+            age_factor = 0.85 * (0.90 ** (age - 1))
+        elif age <= 8:
+            age_factor = 0.85 * (0.90**2) * (0.95 ** (age - 3))
+        else:
+            age_factor = max(0.25, 0.85 * (0.90**2) * (0.95**5) * (0.97 ** (age - 8)))
+
+        # Mileage adjustment (-$0.12/mile over 12k/yr average)
+        expected_mileage = 12_000 * max(1, age)
+        actual_mileage = signals.mileage if signals.mileage_known else expected_mileage
+        mileage_diff = actual_mileage - expected_mileage
+        mileage_adjustment = mileage_diff * -0.12
+        mileage_adjustment = max(-price * 0.25, min(price * 0.25, mileage_adjustment))
+
+        # Condition & Title multipliers
+        cond = signals.condition if signals.condition_known else "used"
+        title = signals.title if signals.title_known else "unknown"
+        CONDITION_MAP = {
+            "new": 1.15,
+            "certified": 1.08,
+            "used": 1.0,
+            "salvage": 0.65,
+            "fair": 0.85,
+            "poor": 0.65,
+        }
+        TITLE_MAP = {"clean": 1.05, "rebuilt": 0.80, "salvage": 0.70, "risky": 0.75, "unknown": 1.0}
+        condition_factor = CONDITION_MAP.get(cond, 1.0)
+        title_factor = TITLE_MAP.get(title, 1.0)
+
+        # Calculate estimated resale value
+        estimated_value = price * age_factor * condition_factor * title_factor + mileage_adjustment
+        estimated_value = max(price * 0.30, min(price * 1.20, estimated_value))
+
+        # Dynamic repair cost
+        REPAIR_PCT = {
+            "new": 0.04,
+            "certified": 0.06,
+            "used": 0.08,
+            "salvage": 0.25,
+            "fair": 0.12,
+            "poor": 0.18,
+        }
+        repair_pct = REPAIR_PCT.get(cond, 0.08)
+        repair_cost = round(max(200.0, estimated_value * repair_pct), 2)
+
+        confidence = round(0.20 + (known_signals * 0.20), 2)
+        return {
+            "repair_cost": repair_cost,
+            "resale_value": round(estimated_value, 2),
+            "confidence": confidence,
+            "breakdown": {
+                "base_price": round(price, 2),
+                "age_factor": round(age_factor, 3),
+                "mileage_adjustment": round(mileage_adjustment, 2),
+                "condition_factor": round(condition_factor, 3),
+                "title_factor": round(title_factor, 3),
+            },
+        }
+
+    # === PRIMARY: Existing Heuristic Model (sufficient data) ===
     repair_pct = _repair_pct(signals, listing_id)
     repair_cost = round(max(200.0, price * repair_pct), 2)
 
@@ -368,9 +444,18 @@ def estimate_flip_economics(
     )
     resale_value = max(round(price * 0.82, 2), resale_value)
 
+    # Add transparency fields to primary model for UI consistency
+    confidence = round(0.40 + (known_signals * 0.15), 2)
     return {
         "repair_cost": repair_cost,
         "resale_value": resale_value,
+        "confidence": confidence,
+        "breakdown": {
+            "repair_pct": round(repair_pct, 4),
+            "margin_pct": round(margin_pct, 4),
+            "recovery_rate": recovery_rate,
+            "fees": fees,
+        },
     }
 
 
