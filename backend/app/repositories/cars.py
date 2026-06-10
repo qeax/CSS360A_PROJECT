@@ -303,7 +303,7 @@ def _build_car_api_dict(car: Car) -> dict[str, Any]:
     price_known = bool(getattr(car, "price_known", True))
     if price_known:
         analysis = calculate_flip_score(
-            car.price, car.resale_value, car.repair_cost or 0, price_known=False
+            car.price, car.resale_value, car.repair_cost or 0
         )
     else:
         analysis = flip_metrics_unknown()
