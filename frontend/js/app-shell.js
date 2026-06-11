@@ -382,9 +382,69 @@ function escapeNotificationsText(s) {
         .replace(/"/g, '&quot;');
 }
 
+function normalizeAppPath(pathname) {
+    if (pathname === '/' || pathname.endsWith('/index.html')) return '/index.html';
+    return pathname;
+}
+
+function initBrandCarHop() {
+    const BRAND_HOP_MS = 600;
+
+    document.querySelectorAll('.app-brand').forEach((link) => {
+        link.addEventListener('click', (e) => {
+            if (e.defaultPrevented) return;
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+            const car = link.querySelector('.app-brand-car');
+            if (!car) return;
+
+            e.preventDefault();
+
+            if (link.dataset.brandHopActive === '1') return;
+            link.dataset.brandHopActive = '1';
+
+            const href = link.getAttribute('href') || '/index.html';
+            let targetPath = '/index.html';
+            try {
+                targetPath = normalizeAppPath(new URL(href, window.location.href).pathname);
+            } catch {
+                /* keep default */
+            }
+            const onHome = normalizeAppPath(window.location.pathname) === targetPath;
+
+            car.classList.remove('app-brand-car--hop');
+            void car.offsetWidth;
+            car.classList.add('app-brand-car--hop');
+
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                delete link.dataset.brandHopActive;
+                car.classList.remove('app-brand-car--hop');
+                car.removeEventListener('animationend', onEnd);
+                if (onHome) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                window.location.assign(href);
+            };
+
+            const onEnd = (ev) => {
+                if (ev.animationName !== 'app-brand-car-hop') return;
+                finish();
+            };
+
+            car.addEventListener('animationend', onEnd);
+            window.setTimeout(finish, BRAND_HOP_MS + 50);
+        });
+    });
+}
+
 function initAppShell() {
     initTheme();
     initThemeToggle();
     initAccountMenu();
     initNotificationsBell();
+    initBrandCarHop();
 }

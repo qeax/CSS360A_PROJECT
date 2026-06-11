@@ -31,6 +31,43 @@
     color: var(--topbar-accent);
 }
 
+.app-brand-car--hop {
+    will-change: transform;
+    animation: app-brand-car-hop 0.6s cubic-bezier(0.33, 0, 0.2, 1);
+}
+
+@keyframes app-brand-car-hop {
+    0% {
+        transform: rotate(180deg) translateY(0);
+    }
+
+    20% {
+        transform: rotate(252deg) translateY(-2px);
+    }
+
+    40% {
+        transform: rotate(324deg) translateY(-4px);
+    }
+
+    60% {
+        transform: rotate(396deg) translateY(-2px);
+    }
+
+    80% {
+        transform: rotate(468deg) translateY(-0.5px);
+    }
+
+    100% {
+        transform: rotate(540deg) translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-brand-car--hop {
+        animation: none;
+    }
+}
+
 .app-brand-icon {
     display: flex;
     align-items: center;
