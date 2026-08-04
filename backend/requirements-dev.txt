@@ -1,5 +1,5 @@
 # Dev / CI only
-ruff>=0.15.16,<1
+ruff>=0.16.1,<1
 pytest>=9.0.3,<10
 pip-audit>=2.10.0,<3
 bandit[toml]>=1.9.4,<2
