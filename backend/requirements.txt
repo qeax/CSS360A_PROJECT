@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 pymysql
-sqlalchemy>=2.0.49
+sqlalchemy>=2.0.52
 cryptography
 alembic
 httpx
